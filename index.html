@@ -2,6 +2,17 @@
 <!--
   Rob2 Operator - universal browser controller for Rob2
   =====================================================
+  REV 0.4  (2026-10-02)  - "BUTTONS" CONTROL STYLE (for the F310 on an iPhone, where the sticks read wrong)
+      * Control style switch in the Drive section: Sticks / Buttons. Remembered on each device.
+        iPhone and iPad start on Buttons, everything else on Sticks.
+      * Buttons style uses 14 buttons and IGNORES BOTH STICKS:
+          D-pad UP / DOWN / LEFT / RIGHT = forward / backward / strafe left / strafe right
+          D-pad UP + X, UP + B, DOWN + X, DOWN + B = the 4 diagonals
+            (two D-pad directions pressed together give the same diagonals)
+          D-pad LEFT + Y, RIGHT + Y = rotate left / right
+          RT = faster, LT = slower, hold A = 100 %
+          LB + RB + START = STOP ALL,  BACK = reset e-stop
+      * Sticks style is unchanged.
   REV 0.3  (2026-10-01)  - STEP 3: DRIVING
       * "Enable driving" switch. While it is ON the page sends the --sticks command
         8 times a second (same message as robot_operator.py): {"sid","seq","t","v","vy","w"}
@@ -147,6 +158,10 @@ button.big { font-size: 16px; padding: 12px 18px; }
 .drivebar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
 .drivebar .spacer { flex: 1 1 auto; }
 
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; background: var(--key); padding: 8px 14px; }
+.seg button.on { background: var(--accent); color: var(--accent-ink); }
+
 /* ---- learn wizard ---- */
 #learn { border: 2px solid var(--accent); }
 #learn .prompt { font: 700 22px var(--sans); margin: 4px 0 8px; }
@@ -171,7 +186,7 @@ button.big { font-size: 16px; padding: 12px 18px; }
 
 <header>
   <h1>Rob2 Operator</h1>
-  <span class="rev">REV 0.3 · Step 0 – 3</span>
+  <span class="rev">REV 0.4 · Step 0 – 3</span>
   <span class="step">Motion commands are sent only while "Driving" is ON</span>
 </header>
 
@@ -257,7 +272,7 @@ button.big { font-size: 16px; padding: 12px 18px; }
       </div>
       <div class="sticks">
         <div class="stick"><div class="ring"><div class="dot" id="dotL"></div></div>
-          <span class="small">LEFT stick: <b id="posL" class="mono">CENTRE</b></span></div>
+          <span class="small" id="posLwrap">LEFT stick: <b id="posL" class="mono">CENTRE</b></span></div>
         <div class="stick"><div class="ring"><div class="dot" id="dotR"></div></div>
           <span class="small">RIGHT stick (not used)</span></div>
       </div>
@@ -291,13 +306,21 @@ button.big { font-size: 16px; padding: 12px 18px; }
       <button id="btnStopAll" class="danger big" type="button" disabled>STOP ALL</button>
       <button id="btnReset" class="big" type="button" disabled>Reset e-stop</button>
     </div>
+    <div class="row" style="margin-bottom:10px">
+      <span class="small">Control style</span>
+      <span class="seg" role="group" aria-label="Control style">
+        <button type="button" id="styleSticks">Sticks</button>
+        <button type="button" id="styleButtons">Buttons (D-pad)</button>
+      </span>
+      <span class="small" id="styleNote"></span>
+    </div>
     <div class="note warn" id="driveMsg">Connect to the robot first (section 2). Until driving is ON, this is only a preview.</div>
     <div class="motion stop" id="motion">STOP</div>
     <div class="row">
       <span class="small">Speed level</span>
       <b class="mono" id="lvl">2/4 · 50%</b>
       <span class="pill warn" id="aheld" hidden>A held = 100%</span>
-      <span class="small" id="lastDpad">D-pad UP / DOWN changes the speed</span>
+      <span class="small" id="lastDpad"></span>
     </div>
     <div class="bar" id="bar"><span></span><span></span><span></span><span></span></div>
     <div class="row mono" id="cmd">v=+0.000  vy=+0.000  w=+0.000</div>
@@ -309,7 +332,7 @@ button.big { font-size: 16px; padding: 12px 18px; }
         <tbody></tbody>
       </table>
     </div>
-    <p class="small">Let go of the stick = STOP. LB + RB + START (or the SPACE key) = STOP ALL. Speeds in the table are for the current level.</p>
+    <p class="small" id="tableNote"></p>
   </section>
 
 </main>
@@ -453,6 +476,61 @@ function stickCommand(st, level) {
   return { name: `STOP (stick ${pos} + ${face} not in the table)`, v: 0, vy: 0, w: 0, stopAll: false };
 }
 
+/* =======================================================================
+   REV 0.4 - "BUTTONS" CONTROL STYLE: 14 buttons, both sticks ignored.
+   The D-pad does the job of the left stick, so the SAME table (STICK_MOTIONS) is used:
+     D-pad direction + X / B / Y.   Two D-pad directions together = that diagonal.
+   ======================================================================= */
+const DPAD_DIAGONALS = {                 // two D-pad directions held together
+  "UP+LEFT": "DIAGONAL FWD-LEFT", "UP+RIGHT": "DIAGONAL FWD-RIGHT",
+  "DOWN+LEFT": "DIAGONAL BACK-LEFT", "DOWN+RIGHT": "DIAGONAL BACK-RIGHT",
+};
+
+/* 'UP', 'DOWN', 'LEFT', 'RIGHT', 'UP+LEFT' ..., 'CENTRE', or 'CONFLICT' (opposite directions together) */
+function dpadPosition(st) {
+  const b = st.btn;
+  if ((b.UP && b.DOWN) || (b.LEFT && b.RIGHT)) return "CONFLICT";
+  const vert = b.UP ? "UP" : b.DOWN ? "DOWN" : "", horiz = b.LEFT ? "LEFT" : b.RIGHT ? "RIGHT" : "";
+  if (vert && horiz) return vert + "+" + horiz;
+  return vert || horiz || "CENTRE";
+}
+
+function buttonCommand(st, level) {
+  const stop = (name) => ({ name, v: 0, vy: 0, w: 0, stopAll: false });
+  if (STOP_ALL.every(n => st.btn[n])) return { name: "STOP ALL (e-stop)", v: 0, vy: 0, w: 0, stopAll: true };
+  if (st.btn.A) level = 1.0;                // hold A = full speed
+  const pos = dpadPosition(st);
+  if (pos === "CENTRE") return stop("STOP (nothing held)");
+  if (pos === "CONFLICT") return stop("STOP (opposite D-pad directions)");
+  const faces = ["B", "X", "Y"].filter(f => st.btn[f]);
+  if (faces.length > 1) return stop("STOP (more than one of B/X/Y)");
+  const face = faces[0] || null;
+  let want = null;
+  if (DPAD_DIAGONALS[pos]) {                // two directions together: a diagonal, no X / B / Y allowed with it
+    if (face) return stop(`STOP (D-pad ${pos} + ${face} not in the table)`);
+    want = STICK_MOTIONS.find(m => m[2] === DPAD_DIAGONALS[pos]);
+  } else {
+    want = STICK_MOTIONS.find(m => m[0] === pos && m[1] === face);
+  }
+  if (!want) return stop(`STOP (D-pad ${pos} + ${face} not in the table)`);
+  const [, , name, kv, kvy, kw] = want;
+  return { name, v: +(kv * MAX_V * level).toFixed(3), vy: +(kvy * MAX_VY * level).toFixed(3),
+           w: +(kw * MAX_W * level).toFixed(3), stopAll: false };
+}
+
+/* ---- which style is in use on this device ---- */
+const STYLE_KEY = "rob2.style.v1";
+const IS_IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+               (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);   // iPadOS says "Mac"
+let controlStyle = (() => {
+  let v = null; try { v = localStorage.getItem(STYLE_KEY); } catch (e) {}
+  return (v === "sticks" || v === "buttons") ? v : (IS_IOS ? "buttons" : "sticks");
+})();
+function commandFor(st, level) { return controlStyle === "buttons" ? buttonCommand(st, level) : stickCommand(st, level); }
+function speedStep(st) {                    // +1 = faster, -1 = slower, 0 = nothing
+  return controlStyle === "buttons" ? (st.btn.RT ? 1 : st.btn.LT ? -1 : 0) : (st.btn.UP ? 1 : st.btn.DOWN ? -1 : 0);
+}
+
 const fmt = (x) => (x >= 0 ? "+" : "") + x.toFixed(3);
 const pct = (x) => Math.round(x * 100) + "%";
 
@@ -483,12 +561,32 @@ let learning = null;          // the Learn wizard state when active
 
 // Build the table once
 function buildTable(level) {
+  const what = controlStyle === "buttons" ? "D-pad" : "Stick";
   $("table").querySelector("tbody").innerHTML = STICK_MOTIONS.map(([p, f, name, kv, kvy, kw]) =>
-    `<tr data-name="${name}"><td>Stick ${p}${f ? " + " + f : ""}</td><td>${name}</td>
+    `<tr data-name="${name}"><td>${what} ${p}${f ? " + " + f : ""}</td><td>${name}</td>
      <td class="num">${fmt(kv * MAX_V * level)}</td><td class="num">${fmt(kvy * MAX_VY * level)}</td>
      <td class="num">${fmt(kw * MAX_W * level)}</td></tr>`).join("");
 }
 let tableLevel = null;
+
+function drawStyle() {                      // the switch, the hints and the table for the chosen style
+  const b = controlStyle === "buttons";
+  $("styleSticks").classList.toggle("on", !b); $("styleButtons").classList.toggle("on", b);
+  $("styleNote").textContent = b ? "14 buttons — both sticks are ignored" : "left stick + X / B / Y";
+  $("lastDpad").textContent = b ? "RT = faster, LT = slower" : "D-pad UP / DOWN changes the speed";
+  $("tableNote").textContent = b
+    ? "Let go of the D-pad = STOP. Two D-pad directions together also give the diagonals. LB + RB + START = STOP ALL, BACK = reset e-stop. Speeds in the table are for the current level."
+    : "Let go of the stick = STOP. LB + RB + START (or the SPACE key) = STOP ALL. Speeds in the table are for the current level.";
+  $("posLwrap").style.opacity = b ? 0.45 : 1;
+  tableLevel = null;                        // rebuild the table on the next frame
+}
+function setStyle(v) {
+  if (v === controlStyle) return;
+  if (typeof drive !== "undefined" && drive.armed) setArmed(false, "the control style was changed");
+  controlStyle = v;
+  try { localStorage.setItem(STYLE_KEY, v); } catch (e) {}
+  drawStyle();
+}
 
 function firstPad() {
   const pads = navigator.getGamepads ? navigator.getGamepads() : [];
@@ -539,21 +637,22 @@ function showState(gp, layout) {
   const travel = ($("dotL").parentElement.clientWidth - 22) / 2;   // how far the dot can move inside the ring
   $("dotL").style.transform = `translate(${st.lx * travel}px, ${st.ly * travel}px)`;
   $("dotR").style.transform = `translate(${st.rx * travel}px, ${st.ry * travel}px)`;
-  $("posL").textContent = stickPosition(st.lx, st.ly);
+  $("posL").textContent = controlStyle === "buttons" ? "ignored" : stickPosition(st.lx, st.ly);
 
-  // speed level from the D-pad: one step per press
-  const d = st.btn.UP ? 1 : st.btn.DOWN ? -1 : 0;
+  // speed level: one step per press (Sticks: D-pad UP / DOWN.  Buttons: RT / LT)
+  const d = speedStep(st);
   if (d && d !== lastDpad) {
     const old = speedI;
     speedI = Math.max(0, Math.min(SPEED_LEVELS.length - 1, speedI + d));
+    const key = controlStyle === "buttons" ? (d > 0 ? "RT" : "LT") : `D-pad ${d > 0 ? "UP" : "DOWN"}`;
     $("lastDpad").textContent = speedI === old
-      ? `D-pad ${d > 0 ? "UP" : "DOWN"}: already at ${d > 0 ? "MAX" : "MIN"} (${pct(SPEED_LEVELS[speedI])})`
-      : `D-pad ${d > 0 ? "UP" : "DOWN"}: ${pct(SPEED_LEVELS[old])} → ${pct(SPEED_LEVELS[speedI])}`;
+      ? `${key}: already at ${d > 0 ? "MAX" : "MIN"} (${pct(SPEED_LEVELS[speedI])})`
+      : `${key}: ${pct(SPEED_LEVELS[old])} → ${pct(SPEED_LEVELS[speedI])}`;
   }
   lastDpad = d;
 
   const lvl = SPEED_LEVELS[speedI];
-  const c = stickCommand(st, lvl);
+  const c = commandFor(st, lvl);
   const shown = st.btn.A ? 1.0 : lvl;
   $("lvl").textContent = `${speedI + 1}/${SPEED_LEVELS.length} · ${pct(lvl)}`;
   $("aheld").hidden = !st.btn.A;
@@ -681,6 +780,9 @@ $("btnForget").addEventListener("click", () => {
 window.addEventListener("gamepadconnected", () => { current = null; });
 window.addEventListener("gamepaddisconnected", () => { current = null; });
 
+$("styleSticks").addEventListener("click", () => setStyle("sticks"));
+$("styleButtons").addEventListener("click", () => setStyle("buttons"));
+drawStyle();
 buildTable(SPEED_LEVELS[speedI]); tableLevel = SPEED_LEVELS[speedI];
 requestAnimationFrame(frame);
 
@@ -946,7 +1048,10 @@ function currentCommand() {
   if (!gp) return ZERO;                                       // controller unplugged
   const { layout } = layoutFor(gp);
   if (!layout) return ZERO;
-  return stickCommand(readPad(gp, layout), SPEED_LEVELS[speedI]);
+  const st = readPad(gp, layout);
+  const c = commandFor(st, SPEED_LEVELS[speedI]);
+  c.back = controlStyle === "buttons" && !!st.btn.BACK && !c.stopAll;   // Buttons style: BACK = reset e-stop
+  return c;
 }
 
 function sendVel(c) {                       // same message as send_vel() in robot_operator.py
@@ -963,6 +1068,8 @@ function driveTick() {
   // LB + RB + START on the controller: e-stop, once per press (works even when driving is OFF)
   if (c.stopAll && !drive.stopAllHeld) estop(true, "controller");
   drive.stopAllHeld = c.stopAll;
+  if (c.back && !drive.backHeld) estop(false, "controller");   // BACK, once per press
+  drive.backHeld = !!c.back;
   if (!drive.armed) return;
   if (!link.client || !link.connected) { setArmed(false, "the robot link dropped"); return; }
   const now = performance.now();
@@ -1003,8 +1110,8 @@ function estop(on, from) {                  // same as estop() in robot_operator
   if (!link.client || !link.connected) return;
   link.client.publish(link.T.estop, JSON.stringify({ estop: on }), { qos: 1 });
   noteSent();
-  drive.estopNote = on ? `E-STOP sent (${from}). Press "Reset e-stop", then let go of the stick, to drive again.`
-                       : "E-stop reset sent. Let go of the stick once (send a STOP) to re-arm the robot.";
+  drive.estopNote = on ? `E-STOP sent (${from}). Press "Reset e-stop" (or BACK in Buttons style), then let go of the controls, to drive again.`
+                       : "E-stop reset sent. Let go of the controls once (send a STOP) to re-arm the robot.";
   drawDrive();
   if (!on) setTimeout(() => { if (drive.estopNote.startsWith("E-stop reset")) { drive.estopNote = ""; drawDrive(); } }, 6000);
 }

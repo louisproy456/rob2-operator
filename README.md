@@ -27,9 +27,9 @@ Controller --> this web page --> EMQX Cloud (wss 8084) --> tablet "final1" --> U
 | Windows, Chrome or Edge | yes (X or D) | yes |
 | Linux, Chrome | yes | yes |
 | Android phone or tablet, Chrome (USB-C adapter) | very likely | yes |
-| iPad / iPhone (any browser) | probably not | yes (Bluetooth or USB-C) |
+| iPad / iPhone (any browser) | buttons work, sticks read wrong: use the **Buttons** control style | yes (Bluetooth or USB-C) |
 
-## Controls (same as `--sticks`)
+## Controls — Sticks style (same as `--sticks`)
 
 | Do this | Motion |
 |---|---|
@@ -42,6 +42,22 @@ Controller --> this web page --> EMQX Cloud (wss 8084) --> tablet "final1" --> U
 | Hold A | 100 % while held |
 | LB + RB + START, the red **STOP ALL** button, or the SPACE key | STOP ALL (e-stop) |
 | **Reset e-stop** button, then let go of the stick | drive again |
+
+## Controls — Buttons style (14 buttons, both sticks ignored)
+
+Choose it with **Control style → Buttons (D-pad)** in the Drive section. iPhone and iPad start on it.
+
+| Do this | Motion |
+|---|---|
+| D-pad UP / DOWN / LEFT / RIGHT | forward / backward / strafe left / strafe right |
+| D-pad UP + X, UP + B (or UP + LEFT, UP + RIGHT together) | diagonal forward-left / forward-right |
+| D-pad DOWN + X, DOWN + B (or DOWN + LEFT, DOWN + RIGHT together) | diagonal back-left / back-right |
+| D-pad LEFT + Y, RIGHT + Y | rotate left / rotate right |
+| Let go of the D-pad | STOP |
+| RT / LT | speed one level faster / slower |
+| Hold A | 100 % while held |
+| LB + RB + START, or the red **STOP ALL** button | STOP ALL (e-stop) |
+| BACK, or the **Reset e-stop** button | reset the e-stop |
 
 ## Files
 
