@@ -45,7 +45,7 @@ Controller --> this web page --> EMQX Cloud (wss 8084) --> tablet "final1" --> U
 
 ## Controls — Buttons style (14 buttons, both sticks ignored)
 
-Choose it with **Control style → Buttons (D-pad)** in the Drive section. iPhone and iPad start on it.
+Choose it with **Control style → Buttons** in the Drive section. iPhone and iPad start on it.
 
 | Do this | Motion |
 |---|---|
@@ -58,6 +58,30 @@ Choose it with **Control style → Buttons (D-pad)** in the Drive section. iPhon
 | Hold A | 100 % while held |
 | LB + RB + START, or the red **STOP ALL** button | STOP ALL (e-stop) |
 | BACK, or the **Reset e-stop** button | reset the e-stop |
+
+## Controls — Combined style (left stick or D-pad)
+
+Choose it with **Control style → Combined**.
+
+| Do this | Motion |
+|---|---|
+| Left stick **or** D-pad: UP / DOWN / LEFT / RIGHT | forward / backward / strafe left / strafe right |
+| Stick pushed to a corner, or two D-pad directions together | the four diagonals |
+| UP + X, UP + B, DOWN + X, DOWN + B | the four diagonals (as in the other styles) |
+| LEFT + Y, RIGHT + Y | rotate left / rotate right |
+| Let go | STOP |
+| RT / LT | speed one level faster / slower |
+| Hold A | 100 % while held |
+| LB + RB + START, or the red **STOP ALL** button | STOP ALL (e-stop) |
+| BACK, or the **Reset e-stop** button | reset the e-stop |
+
+If the stick and the D-pad are used at the same time, the D-pad wins.
+
+## Seeing the commands arrive
+
+While driving is ON, the **CHAIN** line in the Drive section shows what the robot reports back:
+commands sent by the page, commands accepted by the robot, the robot's state and speeds, the
+one-way latency, and which bridge (tablet app) and ESP32 firmware answered.
 
 ## Files
 
