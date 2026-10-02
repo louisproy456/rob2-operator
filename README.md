@@ -14,8 +14,8 @@ Controller --> this web page --> EMQX Cloud (wss 8084) --> tablet "final1" --> U
 |---|---|---|
 | 0 | Page online on GitHub Pages, device check | done (REV 0.1) |
 | 1 | Controller test + Learn wizard + sticks preview | done (REV 0.1) |
-| 2 | Connect to EMQX (settings, ping, robot status) | REV 0.2 |
-| 3 | Drive Rob2 (same table as `robot_operator.py --sticks`) | next |
+| 2 | Connect to EMQX (settings, ping, robot status) | done (REV 0.2) |
+| 3 | Drive Rob2 (same table as `robot_operator.py --sticks`) | REV 0.3 |
 | 4 | Safety tests | later |
 | 5 | Other devices + student guide | later |
 
@@ -29,7 +29,7 @@ Controller --> this web page --> EMQX Cloud (wss 8084) --> tablet "final1" --> U
 | Android phone or tablet, Chrome (USB-C adapter) | very likely | yes |
 | iPad / iPhone (any browser) | probably not | yes (Bluetooth or USB-C) |
 
-## Controls (Step 3, same as `--sticks`)
+## Controls (same as `--sticks`)
 
 | Do this | Motion |
 |---|---|
@@ -40,7 +40,8 @@ Controller --> this web page --> EMQX Cloud (wss 8084) --> tablet "final1" --> U
 | Let go of the stick | STOP |
 | D-pad UP / DOWN | speed 25 / 50 / 75 / 100 % |
 | Hold A | 100 % while held |
-| LB + RB + START | STOP ALL |
+| LB + RB + START, the red **STOP ALL** button, or the SPACE key | STOP ALL (e-stop) |
+| **Reset e-stop** button, then let go of the stick | drive again |
 
 ## Files
 
@@ -59,3 +60,12 @@ device (in **Settings**) and stays on that device.
 2. In **Robot link → Settings**, type the EMQX user name and password (port **8084**, path `/mqtt`).
 3. Tap **Connect**. The robot shows `online` when the tablet app *final1* is running.
 4. Plug in the controller and press any button.
+5. Tap **Enable driving**. Motion commands are sent only while it says **Driving: ON**.
+
+## Safety
+
+- Driving switches itself **OFF** (and zeros are sent) when the page is hidden, loses focus,
+  the link drops, or you disconnect. Tap **Enable driving** again to continue.
+- No controller, or the Learn wizard open = zeros.
+- Use only **one** operator at a time: this page **or** `robot_operator.py`.
+- First test: Rob2 on a box, wheels off the ground.

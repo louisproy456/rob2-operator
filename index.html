@@ -2,6 +2,14 @@
 <!--
   Rob2 Operator - universal browser controller for Rob2
   =====================================================
+  REV 0.3  (2026-10-01)  - STEP 3: DRIVING
+      * "Enable driving" switch. While it is ON the page sends the --sticks command
+        8 times a second (same message as robot_operator.py): {"sid","seq","t","v","vy","w"}
+      * LB + RB + START on the controller, the red STOP ALL button, or the SPACE key = e-stop
+      * RESET E-STOP button (replaces the keyboard R of the Python program)
+      * LED check: the colour the ESP32 SHOULD show vs the colour it REPORTS
+      * SAFETY: driving switches itself OFF (and zeros are sent) when the page is hidden,
+        loses focus, the link drops or you disconnect. No controller = zeros.
   REV 0.2  (2026-10-01)  - STEP 2: ROBOT LINK
       * Settings: EMQX address, port 8084 (secure WebSocket), user, password, robot id.
         They are typed on each device and saved on THAT device only (never in this file).
@@ -132,6 +140,13 @@ td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-alig
 .tablewrap { overflow-x: auto; }
 tr.hit td { background: var(--ok-bg); color: var(--ok); }
 
+/* ---- drive controls ---- */
+button.danger { background: var(--bad); color: #fff; border-color: transparent; }
+@media (prefers-color-scheme: dark) { button.danger { color: #2a0b0b; } }
+button.big { font-size: 16px; padding: 12px 18px; }
+.drivebar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.drivebar .spacer { flex: 1 1 auto; }
+
 /* ---- learn wizard ---- */
 #learn { border: 2px solid var(--accent); }
 #learn .prompt { font: 700 22px var(--sans); margin: 4px 0 8px; }
@@ -156,8 +171,8 @@ tr.hit td { background: var(--ok-bg); color: var(--ok); }
 
 <header>
   <h1>Rob2 Operator</h1>
-  <span class="rev">REV 0.2 · Step 0 + 1 + 2</span>
-  <span class="step">Robot link + controller test — no motion commands are sent yet</span>
+  <span class="rev">REV 0.3 · Step 0 – 3</span>
+  <span class="step">Motion commands are sent only while "Driving" is ON</span>
 </header>
 
 <main>
@@ -268,7 +283,15 @@ tr.hit td { background: var(--ok-bg); color: var(--ok); }
 
   <!-- ===================== STICKS PREVIEW ===================== -->
   <section id="preview" class="wide">
-    <h2>4 · Sticks preview (same table as robot_operator.py --sticks) — not sent yet</h2>
+    <h2>4 · Drive (same table as robot_operator.py --sticks)</h2>
+    <div class="drivebar">
+      <button id="btnArm" class="primary big" type="button" disabled>Enable driving</button>
+      <span class="pill warn" id="pillDrive">Driving: OFF</span>
+      <span class="spacer"></span>
+      <button id="btnStopAll" class="danger big" type="button" disabled>STOP ALL</button>
+      <button id="btnReset" class="big" type="button" disabled>Reset e-stop</button>
+    </div>
+    <div class="note warn" id="driveMsg">Connect to the robot first (section 2). Until driving is ON, this is only a preview.</div>
     <div class="motion stop" id="motion">STOP</div>
     <div class="row">
       <span class="small">Speed level</span>
@@ -278,13 +301,15 @@ tr.hit td { background: var(--ok-bg); color: var(--ok); }
     </div>
     <div class="bar" id="bar"><span></span><span></span><span></span><span></span></div>
     <div class="row mono" id="cmd">v=+0.000  vy=+0.000  w=+0.000</div>
+    <div class="row mono" id="sentLine">not sending</div>
+    <div class="row mono" id="ledLine"></div>
     <div class="tablewrap" style="margin-top:10px">
       <table id="table">
         <thead><tr><th>Do this</th><th>Motion</th><th>v m/s</th><th>vy m/s</th><th>w rad/s</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
-    <p class="small">Let go of the stick = STOP. LB + RB + START = STOP ALL. Speeds in the table are for the current level.</p>
+    <p class="small">Let go of the stick = STOP. LB + RB + START (or the SPACE key) = STOP ALL. Speeds in the table are for the current level.</p>
   </section>
 
 </main>
@@ -808,6 +833,7 @@ function connectLink(ev) {
 function disconnectLink() {
   const client = link.client;
   if (!client) return;
+  if (drive.armed) setArmed(false, "you disconnected");
   link.client = null; link.connected = false;
   const done = () => { try { client.end(); } catch (e) {} };
   try { client.connected ? client.publish(link.T.op_status, "offline", { qos: 1, retain: true }, done) : done(); }
@@ -833,6 +859,10 @@ window.addEventListener("pagehide", () => {
 /* ---- ping: page -> EMQX -> tablet -> USB -> ESP32 -> back ---- */
 function ping() {
   if (!link.client || !link.connected) return;
+  const lastPing = link.pingSent.get(link.pingId);
+  if (lastPing !== undefined && performance.now() - lastPing < 350) return;   // not more than 3 pings a second
+  if (sentLastSecond() >= RATE_LIMIT - 1) return;                             // busy: stay under 10 messages per second
+  noteSent();
   link.pingId++;
   link.pingSent.set(link.pingId, performance.now());
   link.client.publish(link.T.ping, JSON.stringify({ id: link.pingId, sid: SID }), { qos: 0 });
@@ -872,6 +902,161 @@ function renderLink() {
   }
 }
 setInterval(renderLink, 250);
+
+/* =======================================================================
+   STEP 3 - DRIVING
+   Sends the --sticks command 8 times a second, exactly like send_vel() in
+   robot_operator.py:  {"sid","seq","t","v","vy","w"}  QoS 0, never 2 messages
+   closer than 100 ms (EMQX Serverless allows 10 per second).
+   ======================================================================= */
+const SEND_HZ = 8, PERIOD_MS = 1000 / SEND_HZ, MIN_GAP_MS = 100;
+
+// LED colour per motion and the "which motion dominates" rule - copied from robot_link.py
+const LED_COLORS = { STOP: "WHITE (dim)", FORWARD: "GREEN", BACKWARD: "ORANGE", STRAFE_LEFT: "BLUE",
+                     STRAFE_RIGHT: "CYAN", ROTATE_LEFT: "MAGENTA", ROTATE_RIGHT: "YELLOW" };
+function classify(vx, vy, w) {
+  const a = Math.abs(vx) / MAX_V, b = Math.abs(vy) / MAX_VY, c = Math.abs(w) / MAX_W;
+  if (Math.max(a, b, c) < 0.01) return "STOP";
+  if (a >= b && a >= c) return vx > 0 ? "FORWARD" : "BACKWARD";
+  if (b >= c) return vy > 0 ? "STRAFE_LEFT" : "STRAFE_RIGHT";
+  return w > 0 ? "ROTATE_LEFT" : "ROTATE_RIGHT";
+}
+
+/* EMQX Serverless allows 10 messages per second from one client. Count what we sent in
+   the last second: ordinary messages wait when we are at the limit; STOP and e-stop never wait. */
+const RATE_LIMIT = 10;
+const sentTimes = [];
+function sentLastSecond() {
+  const cut = performance.now() - 1000;
+  while (sentTimes.length && sentTimes[0] < cut) sentTimes.shift();
+  return sentTimes.length;
+}
+function noteSent() { sentTimes.push(performance.now()); }
+
+const drive = { armed: false, seq: 0, sent: 0, lastSend: 0, nextT: 0,
+                last: { v: 0, vy: 0, w: 0 }, stopAllHeld: false, wake: null, estopNote: "" };
+const ZERO = { name: "STOP", v: 0, vy: 0, w: 0, stopAll: false };
+
+/* What should be sent right now? Read the controller HERE (not from the screen),
+   so a frozen screen can never keep an old command alive. */
+function currentCommand() {
+  if (learning) return ZERO;                                  // teaching the controller: never drive
+  if (document.hidden || !document.hasFocus()) return ZERO;   // page not in front: the controller may be frozen
+  const gp = firstPad();
+  if (!gp) return ZERO;                                       // controller unplugged
+  const { layout } = layoutFor(gp);
+  if (!layout) return ZERO;
+  return stickCommand(readPad(gp, layout), SPEED_LEVELS[speedI]);
+}
+
+function sendVel(c) {                       // same message as send_vel() in robot_operator.py
+  drive.seq++;
+  const msg = { sid: SID, seq: drive.seq, t: Date.now(), v: +c.v.toFixed(3), vy: +c.vy.toFixed(3), w: +c.w.toFixed(3) };
+  link.client.publish(link.T.vel, JSON.stringify(msg), { qos: 0 });
+  noteSent();
+  drive.sent++; drive.lastSend = performance.now();
+  drive.last = { v: msg.v, vy: msg.vy, w: msg.w };
+}
+
+function driveTick() {
+  const c = currentCommand();
+  // LB + RB + START on the controller: e-stop, once per press (works even when driving is OFF)
+  if (c.stopAll && !drive.stopAllHeld) estop(true, "controller");
+  drive.stopAllHeld = c.stopAll;
+  if (!drive.armed) return;
+  if (!link.client || !link.connected) { setArmed(false, "the robot link dropped"); return; }
+  const now = performance.now();
+  const moving = drive.last.v || drive.last.vy || drive.last.w;
+  const stopNow = moving && !c.v && !c.vy && !c.w;            // a STOP goes out right away...
+  if (stopNow) drive.nextT = Math.min(drive.nextT, Math.max(now, drive.lastSend + MIN_GAP_MS));
+  if (now >= drive.nextT) {                                   // ...everything else on the 8 Hz beat
+    // At the EMQX limit: wait for the next tick. The FIRST stop after moving never waits.
+    if (!stopNow && sentLastSecond() >= RATE_LIMIT - 1) return;
+    sendVel(c);
+    drive.nextT = Math.max(drive.nextT + PERIOD_MS, now + MIN_GAP_MS);
+    if (now - drive.nextT > 1000) drive.nextT = now + PERIOD_MS;   // fell far behind (device slept)
+  }
+}
+setInterval(driveTick, 20);
+
+/* Driving ON / OFF */
+function setArmed(on, why) {
+  if (on && (!link.client || !link.connected)) return;
+  const was = drive.armed;
+  drive.armed = on;
+  if (on) {
+    drive.nextT = performance.now();
+    if ("wakeLock" in navigator) navigator.wakeLock.request("screen").then(w => { drive.wake = w; }).catch(() => {});
+  } else {
+    if (was && link.client && link.connected) {               // say STOP three times, like shutdown() in Python
+      sendVel(ZERO);
+      setTimeout(() => { if (!drive.armed && link.client && link.connected) sendVel(ZERO); }, PERIOD_MS);
+      setTimeout(() => { if (!drive.armed && link.client && link.connected) sendVel(ZERO); }, 2 * PERIOD_MS);
+    }
+    drive.last = { v: 0, vy: 0, w: 0 };
+    if (drive.wake) { try { drive.wake.release(); } catch (e) {} drive.wake = null; }
+  }
+  drawDrive(why);
+}
+
+function estop(on, from) {                  // same as estop() in robot_operator.py
+  if (!link.client || !link.connected) return;
+  link.client.publish(link.T.estop, JSON.stringify({ estop: on }), { qos: 1 });
+  noteSent();
+  drive.estopNote = on ? `E-STOP sent (${from}). Press "Reset e-stop", then let go of the stick, to drive again.`
+                       : "E-stop reset sent. Let go of the stick once (send a STOP) to re-arm the robot.";
+  drawDrive();
+  if (!on) setTimeout(() => { if (drive.estopNote.startsWith("E-stop reset")) { drive.estopNote = ""; drawDrive(); } }, 6000);
+}
+
+function drawDrive(why) {
+  const linked = !!(link.client && link.connected);
+  $("btnArm").disabled = !linked;
+  $("btnStopAll").disabled = $("btnReset").disabled = !linked;
+  $("btnArm").textContent = drive.armed ? "Disable driving" : "Enable driving";
+  $("btnArm").classList.toggle("primary", !drive.armed);
+  setPill("pillDrive", drive.armed ? "ok" : "warn", drive.armed ? "Driving: ON" : "Driving: OFF");
+  const m = $("driveMsg");
+  let text = "", kind = "warn";
+  if (why) { text = `Driving switched OFF: ${why}. Zeros were sent.`; kind = "bad"; }
+  else if (drive.estopNote) { text = drive.estopNote; kind = "bad"; }
+  else if (!linked) text = "Connect to the robot first (section 2). Until driving is ON, this is only a preview.";
+  else if (!drive.armed) text = "Driving is OFF: nothing is sent. Put Rob2 on a box for the first test, then tap “Enable driving”.";
+  m.hidden = !text; m.textContent = text; m.className = "note " + kind;
+}
+
+$("btnArm").addEventListener("click", () => { drive.estopNote = ""; setArmed(!drive.armed); });
+$("btnStopAll").addEventListener("click", () => estop(true, "button"));
+$("btnReset").addEventListener("click", () => estop(false, "button"));
+// SPACE = STOP ALL (not while typing in a Settings field)
+window.addEventListener("keydown", (e) => {
+  if (e.code !== "Space" || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+  e.preventDefault();
+  if (!e.repeat) estop(true, "SPACE key");
+});
+
+/* SAFETY: anything that takes the page out of your hands switches driving OFF */
+document.addEventListener("visibilitychange", () => { if (document.hidden && drive.armed) setArmed(false, "the page was hidden"); });
+window.addEventListener("blur", () => { if (drive.armed) setArmed(false, "the page lost focus (another window or app was selected)"); });
+window.addEventListener("pagehide", () => { if (drive.armed && link.client && link.connected) { try { sendVel(ZERO); } catch (e) {} drive.armed = false; } }, true);
+
+/* The "sent" line and the LED check (4 times a second) */
+function renderDrive() {
+  const linked = !!(link.client && link.connected);
+  if ($("btnArm").disabled === linked) drawDrive();           // link came up or went down
+  $("sentLine").textContent = drive.armed
+    ? `SENDING  v=${fmt(drive.last.v)}  vy=${fmt(drive.last.vy)}  w=${fmt(drive.last.w)}   @ ${SEND_HZ} Hz   sent=${drive.sent}`
+    : `not sending   (sent so far: ${drive.sent})`;
+  const el = $("ledLine");
+  if (!drive.armed) { el.textContent = ""; return; }
+  const want = LED_COLORS[classify(drive.last.v, drive.last.vy, drive.last.w)];
+  const fresh = link.stateRx && performance.now() - link.stateRx < 1500;
+  const got = String(link.robotState.led ?? "?");
+  const ok = got.split(" ")[0] === want.split(" ")[0];
+  el.textContent = `LED should be: ${want}   ESP32 reports: ${fresh ? got : "(no fresh report)"}   ${fresh ? (ok ? "OK" : "different — see the robot state") : ""}`;
+}
+setInterval(renderDrive, 250);
+drawDrive();
 </script>
 </body>
 </html>
