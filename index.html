@@ -2,6 +2,14 @@
 <!--
   Rob2 Operator - universal browser controller for Rob2
   =====================================================
+  REV 0.2  (2026-10-01)  - STEP 2: ROBOT LINK
+      * Settings: EMQX address, port 8084 (secure WebSocket), user, password, robot id.
+        They are typed on each device and saved on THAT device only (never in this file).
+      * Connects to EMQX with MQTT v5 (same topics and Last Will as robot_operator.py)
+      * Shows the robot: online / offline, state, ESP32 LED, firmware, latency, watchdog trips
+      * PING: page -> EMQX -> tablet -> USB -> ESP32 -> back (round-trip time)
+      * Warns if another operator is already online
+      * STILL NO MOTION COMMANDS (that is Step 3)
   REV 0.1  (2026-10-01)  - STEP 0 + STEP 1
       * Device check: is this browser able to run the operator? (HTTPS, gamepad, WebSocket ...)
       * Controller test: every control shown by its NAME (A, B, X, Y, LB, RB, START, D-pad, sticks)
@@ -75,6 +83,23 @@ button.primary { background: var(--accent); color: var(--accent-ink); border-col
 button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 button[disabled] { opacity: .45; cursor: default; }
 
+/* ---- robot link (settings form + status) ---- */
+.form { display: grid; grid-template-columns: auto 1fr; gap: 8px 10px; align-items: center; margin: 10px 0; }
+.form label { font-size: 13px; color: var(--muted); }
+.form input[type=text], .form input[type=password], .form input[type=number] {
+  width: 100%; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--ink); font: 14px var(--mono);
+}
+.form input:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+.form .span2 { grid-column: 1 / -1; }
+.note { padding: 8px 10px; border-radius: 8px; font-size: 13px; margin: 8px 0; }
+.note.bad { background: var(--bad-bg); color: var(--bad); }
+.note.warn { background: var(--warn-bg); color: var(--warn); }
+.note.ok { background: var(--ok-bg); color: var(--ok); }
+.info { display: grid; gap: 4px; margin: 8px 0; }
+.info div { overflow-wrap: anywhere; }
+details > summary { cursor: pointer; font-weight: 600; margin: 6px 0; }
+
 /* ---- controller picture ---- */
 .pad { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; margin: 8px 0 4px; }
 .shoulders { display: flex; justify-content: space-between; grid-column: 1 / -1; gap: 8px; }
@@ -131,8 +156,8 @@ tr.hit td { background: var(--ok-bg); color: var(--ok); }
 
 <header>
   <h1>Rob2 Operator</h1>
-  <span class="rev">REV 0.1 · Step 0 + 1</span>
-  <span class="step">Controller test only — nothing is sent to the robot yet</span>
+  <span class="rev">REV 0.2 · Step 0 + 1 + 2</span>
+  <span class="step">Robot link + controller test — no motion commands are sent yet</span>
 </header>
 
 <main>
@@ -144,9 +169,51 @@ tr.hit td { background: var(--ok-bg); color: var(--ok); }
     <p class="small" id="ua"></p>
   </section>
 
+  <!-- ===================== STEP 2: ROBOT LINK ===================== -->
+  <section id="link">
+    <h2>2 · Robot link (EMQX)</h2>
+    <div class="row" id="linkPills">
+      <span class="pill warn" id="pillBroker">EMQX: not connected</span>
+      <span class="pill warn" id="pillRobot">Robot: ?</span>
+    </div>
+    <div id="linkMsg" hidden></div>
+    <div id="otherOp" class="note warn" hidden>Another operator was already online when this page connected.
+      Use only ONE operator at a time (this page OR robot_operator.py).</div>
+
+    <!-- Connect / Disconnect stay visible even when the Settings box is folded -->
+    <div class="row" style="margin:10px 0">
+      <button class="primary" id="btnConnect" type="submit" form="settings">Connect</button>
+      <button id="btnDisconnect" type="button" disabled>Disconnect</button>
+    </div>
+
+    <details id="settingsBox" open>
+      <summary>Settings</summary>
+      <form class="form" id="settings" autocomplete="off">
+        <label for="fHost">Broker address</label><input id="fHost" type="text" inputmode="url" autocapitalize="off" spellcheck="false">
+        <label for="fPort">Port (WebSocket TLS)</label><input id="fPort" type="number" min="1" max="65535">
+        <label for="fPath">Path</label><input id="fPath" type="text" autocapitalize="off" spellcheck="false">
+        <label for="fUser">User name</label><input id="fUser" type="text" autocapitalize="off" autocomplete="username" spellcheck="false">
+        <label for="fPass">Password</label><input id="fPass" type="password" autocomplete="current-password">
+        <label for="fRobot">Robot id</label><input id="fRobot" type="text" autocapitalize="off" spellcheck="false">
+        <label class="span2"><input id="fShow" type="checkbox"> show the password</label>
+        <label class="span2"><input id="fRemember" type="checkbox" checked> remember these settings on this device</label>
+        <div class="row span2">
+          <button id="btnForgetSettings" type="button">Forget saved settings</button>
+        </div>
+      </form>
+      <p class="small">The password stays on this device (in this browser). It is never put in the page on GitHub.</p>
+    </details>
+
+    <div class="info mono" id="robotInfo"></div>
+    <div class="row">
+      <button id="btnPing" type="button" disabled>PING</button>
+      <span class="mono" id="pingLine">press PING to measure page → EMQX → tablet → USB → ESP32 → back</span>
+    </div>
+  </section>
+
   <!-- ===================== STEP 1: CONTROLLER ===================== -->
   <section id="controller">
-    <h2>2 · Controller</h2>
+    <h2>3 · Controller</h2>
     <div id="padStatus" class="row"><span class="pill warn">no controller yet</span>
       <span class="small">Plug in or pair the controller, then press any button.</span></div>
     <div class="row" style="margin-top:10px">
@@ -201,7 +268,7 @@ tr.hit td { background: var(--ok-bg); color: var(--ok); }
 
   <!-- ===================== STICKS PREVIEW ===================== -->
   <section id="preview" class="wide">
-    <h2>3 · Sticks preview (same table as robot_operator.py --sticks) — not sent yet</h2>
+    <h2>4 · Sticks preview (same table as robot_operator.py --sticks) — not sent yet</h2>
     <div class="motion stop" id="motion">STOP</div>
     <div class="row">
       <span class="small">Speed level</span>
@@ -222,6 +289,7 @@ tr.hit td { background: var(--ok-bg); color: var(--ok); }
 
 </main>
 
+<script src="mqtt.min.js"></script>
 <script>
 "use strict";
 /* =======================================================================
@@ -590,6 +658,220 @@ window.addEventListener("gamepaddisconnected", () => { current = null; });
 
 buildTable(SPEED_LEVELS[speedI]); tableLevel = SPEED_LEVELS[speedI];
 requestAnimationFrame(frame);
+
+/* =======================================================================
+   STEP 2 - ROBOT LINK (EMQX over secure WebSocket)
+   Same topics, same messages, same Last Will as robot_link.py / robot_operator.py.
+   NO motion command is sent in this step.
+   ======================================================================= */
+const DEFAULTS = { host: "kd6b8bb2.ala.us-east-1.emqxsl.com", port: 8084, path: "/mqtt", user: "", pass: "", robot: "bot1" };
+const SETTINGS_KEY = "rob2.settings.v1";
+
+function topics(robot) {                    // same as topics() in robot_link.py
+  const base = `robot/${robot}`;
+  return { vel: `${base}/cmd/vel`, estop: `${base}/cmd/estop`, op_status: `${base}/operator/status`,
+           state: `${base}/state`, status: `${base}/status`, ping: `${base}/ping`, pong: `${base}/pong` };
+}
+
+// A new session id every time the page loads (like uuid4().hex[:8] in Python)
+const SID = Array.from(crypto.getRandomValues(new Uint8Array(4)), b => b.toString(16).padStart(2, "0")).join("");
+
+const link = {
+  client: null, T: null, robot: null,
+  connected: false, everConnected: false, announced: false,
+  robotStatus: "?", robotState: {}, stateRx: 0,
+  pingId: 0, pingSent: new Map(), rtts: [],
+};
+
+/* ---- settings: fill the form, save / forget on this device ---- */
+function loadSettings() {
+  let s = {};
+  try { s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}"); } catch (e) {}
+  return Object.assign({}, DEFAULTS, s);
+}
+function fillForm(s) {
+  $("fHost").value = s.host; $("fPort").value = s.port; $("fPath").value = s.path;
+  $("fUser").value = s.user; $("fPass").value = s.pass; $("fRobot").value = s.robot;
+}
+function readForm() {
+  return { host: $("fHost").value.trim().replace(/^[a-z]+:\/\//i, "").replace(/[:/].*$/, ""),
+           port: parseInt($("fPort").value, 10) || DEFAULTS.port,
+           path: "/" + $("fPath").value.trim().replace(/^\/+/, ""),
+           user: $("fUser").value.trim(), pass: $("fPass").value, robot: $("fRobot").value.trim() || DEFAULTS.robot };
+}
+fillForm(loadSettings());
+$("fShow").addEventListener("change", e => { $("fPass").type = e.target.checked ? "text" : "password"; });
+$("btnForgetSettings").addEventListener("click", () => {
+  try { localStorage.removeItem(SETTINGS_KEY); } catch (e) {}
+  fillForm(DEFAULTS);
+  say("ok", "Saved settings removed from this device.");
+});
+
+function say(kind, text) {                  // one message line under the pills
+  const el = $("linkMsg");
+  if (!text) { el.hidden = true; return; }
+  el.className = "note " + kind; el.textContent = text; el.hidden = false;
+}
+
+/* ---- connect / disconnect ---- */
+function connectLink(ev) {
+  if (ev) ev.preventDefault();
+  const s = readForm();
+  if (!s.host || !s.user || !s.pass) { say("bad", "Fill in the broker address, the user name and the password first."); return; }
+  if ($("fRemember").checked) { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch (e) {} }
+  if (link.client) { try { link.client.end(true); } catch (e) {} }
+
+  link.T = topics(s.robot); link.robot = s.robot;
+  link.connected = false; link.everConnected = false; link.announced = false; link.refused = false;
+  link.robotStatus = "?"; link.robotState = {}; link.stateRx = 0;
+  link.pingSent.clear(); link.rtts = [];
+  $("otherOp").hidden = true;
+
+  // Secure WebSocket (wss). Plain ws is only used for a broker on this same computer (testing).
+  const local = s.host === "localhost" || s.host.startsWith("127.");
+  const url = `${local ? "ws" : "wss"}://${s.host}:${s.port}${s.path}`;
+  say("warn", `Connecting to ${url} …`);
+  setPill("pillBroker", "warn", "EMQX: connecting…");
+
+  const client = mqtt.connect(url, {
+    clientId: `op-web-${s.robot}-${SID}`,
+    username: s.user, password: s.pass,
+    protocolVersion: 5, clean: true, keepalive: 10,
+    reconnectPeriod: 2000, connectTimeout: 10000,
+    // If this page vanishes (tab closed, Wi-Fi lost), the broker publishes this for us:
+    will: { topic: link.T.op_status, payload: "offline", qos: 1, retain: true },
+  });
+  link.client = client;
+  $("btnDisconnect").disabled = false;
+
+  client.on("connect", () => {
+    if (client !== link.client) return;
+    link.connected = true; link.everConnected = true; link.announced = false;
+    say("ok", "Connected to EMQX.");
+    setPill("pillBroker", "ok", "EMQX: connected");
+    $("btnPing").disabled = false;
+    $("settingsBox").open = false;
+    client.subscribe({ [link.T.state]: { qos: 0 }, [link.T.status]: { qos: 1 },
+                       [link.T.pong]: { qos: 0 }, [link.T.op_status]: { qos: 1 } });
+    // Listen first (is another operator already online?), THEN say that we are online.
+    setTimeout(() => {
+      if (client !== link.client || !link.connected) return;
+      client.publish(link.T.op_status, "online", { qos: 1, retain: true });
+      link.announced = true;
+    }, 700);
+  });
+
+  client.on("message", (topic, payload) => {
+    if (client !== link.client) return;
+    const text = payload.toString();
+    if (topic === link.T.pong) {
+      try {
+        const id = JSON.parse(text).id, t0 = link.pingSent.get(id);
+        if (t0 !== undefined) { link.pingSent.delete(id); link.rtts.push(performance.now() - t0); }
+      } catch (e) {}
+    } else if (topic === link.T.state) {
+      try { link.robotState = JSON.parse(text); link.stateRx = performance.now(); } catch (e) {}
+    } else if (topic === link.T.status) {
+      link.robotStatus = text;
+    } else if (topic === link.T.op_status) {
+      if (!link.announced && text === "online") $("otherOp").hidden = false;   // someone else was here first
+    }
+  });
+
+  client.on("error", (err) => {
+    if (client !== link.client) return;
+    const msg = String((err && err.message) || err), code = err && err.code;
+    if (code === 134 || code === 135 || code === 4 || code === 5 || /not authorized|bad user ?name/i.test(msg)) {
+      say("bad", "EMQX refused the user name or password. Check them in Settings.");
+      setPill("pillBroker", "bad", "EMQX: login refused");
+      link.refused = true;
+      client.end(true); link.connected = false; $("btnPing").disabled = true; $("settingsBox").open = true;
+      $("btnDisconnect").disabled = true;
+    } else {
+      say("bad", "Link problem: " + msg);
+    }
+  });
+
+  client.on("close", () => {
+    if (client !== link.client) return;
+    link.connected = false; $("btnPing").disabled = true;
+    if (link.refused) return;                 // the "login refused" message stays on screen
+    if (!link.everConnected) {
+      say("bad", "Could not reach the broker. Check the address, the port (8084), the path (/mqtt) and your internet. Trying again…");
+      setPill("pillBroker", "bad", "EMQX: cannot connect");
+    } else {
+      setPill("pillBroker", "warn", "EMQX: reconnecting…");
+    }
+  });
+}
+
+function disconnectLink() {
+  const client = link.client;
+  if (!client) return;
+  link.client = null; link.connected = false;
+  const done = () => { try { client.end(); } catch (e) {} };
+  try { client.connected ? client.publish(link.T.op_status, "offline", { qos: 1, retain: true }, done) : done(); }
+  catch (e) { done(); }
+  setPill("pillBroker", "warn", "EMQX: not connected");
+  setPill("pillRobot", "warn", "Robot: ?");
+  $("btnDisconnect").disabled = true; $("btnPing").disabled = true; $("settingsBox").open = true;
+  $("otherOp").hidden = true;
+  say("ok", "Disconnected.");
+}
+
+function setPill(id, kind, text) { const el = $(id); el.className = "pill " + kind; el.textContent = text; }
+
+$("settings").addEventListener("submit", connectLink);
+$("btnDisconnect").addEventListener("click", disconnectLink);
+// Leaving the page: say "offline" ourselves (the Last Will is the backup).
+window.addEventListener("pagehide", () => {
+  if (link.client && link.client.connected) {
+    try { link.client.publish(link.T.op_status, "offline", { qos: 1, retain: true }); link.client.end(); } catch (e) {}
+  }
+});
+
+/* ---- ping: page -> EMQX -> tablet -> USB -> ESP32 -> back ---- */
+function ping() {
+  if (!link.client || !link.connected) return;
+  link.pingId++;
+  link.pingSent.set(link.pingId, performance.now());
+  link.client.publish(link.T.ping, JSON.stringify({ id: link.pingId, sid: SID }), { qos: 0 });
+}
+$("btnPing").addEventListener("click", ping);
+
+function pingLine() {                       // same numbers as ping_line() in robot_operator.py
+  const r = link.rtts, now = performance.now();
+  let lost = 0; link.pingSent.forEach(t => { if (now - t > 2000) lost++; });
+  if (!r.length) return "press PING to measure page → EMQX → tablet → USB → ESP32 → back" + (lost ? `   (lost ${lost})` : "");
+  const s = r.slice().sort((a, b) => a - b), mean = r.reduce((a, b) => a + b, 0) / r.length;
+  const p95 = s[Math.max(0, Math.min(s.length - 1, Math.round(0.95 * s.length) - 1))];
+  const jit = r.length > 1 ? Math.sqrt(r.reduce((a, b) => a + (b - mean) ** 2, 0) / r.length) : 0;
+  const f = x => x.toFixed(0);
+  return `last ${f(r[r.length - 1])} ms   min ${f(s[0])}   avg ${f(mean)}   p95 ${f(p95)}   max ${f(s[s.length - 1])}   jitter ${f(jit)}   (n=${r.length}, lost ${lost})`;
+}
+
+/* ---- show the robot (4 times a second) ---- */
+function line(text) { const d = document.createElement("div"); d.textContent = text; return d; }
+function renderLink() {
+  $("pingLine").textContent = pingLine();
+  const box = $("robotInfo");
+  box.textContent = "";
+  if (!link.client) return;
+  const s = link.robotState, fresh = link.stateRx && performance.now() - link.stateRx < 1500;
+  const online = link.robotStatus === "online";
+  if (link.connected) setPill("pillRobot", online ? "ok" : (link.robotStatus === "?" ? "warn" : "bad"),
+                              `Robot '${link.robot}': ${link.robotStatus}`);
+  box.appendChild(line(`Robot '${link.robot}'  link: ${link.robotStatus}   state report: ${fresh ? "fresh" : "STALE / none"}`));
+  if (link.connected && !online)
+    box.appendChild(line("→ robot not reachable: is final1 open on the tablet, with EMQX + USB green?"));
+  if (s && Object.keys(s).length) {
+    const num = (x, d) => (typeof x === "number" ? (x >= 0 ? "+" : "") + x.toFixed(d) : "?");
+    box.appendChild(line(`CHAIN   bridge=${s.bridge ?? "?"} rev ${s.bridge_rev ?? "-"}   ESP32 firmware ${s.fw ?? "?"}   ESP32 LED reports: ${s.led ?? "?"}`));
+    box.appendChild(line(`ROBOT   ${s.state ?? "?"}   v=${num(s.v, 2)}  w=${num(s.w, 2)}  pos=(${num(s.x, 2)}, ${num(s.y, 2)})`));
+    box.appendChild(line(`        one-way latency ${s.latency_ms == null ? "-" : s.latency_ms + " ms"}   ok=${s.ok ?? "?"} stale=${s.stale ?? "?"} old=${s.old ?? "?"} watchdog trips=${s.watchdog_trips ?? "?"}`));
+  }
+}
+setInterval(renderLink, 250);
 </script>
 </body>
 </html>

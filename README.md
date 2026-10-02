@@ -12,10 +12,10 @@ Controller --> this web page --> EMQX Cloud (wss 8084) --> tablet "final1" --> U
 
 | Step | What | State |
 |---|---|---|
-| 0 | Page online on GitHub Pages, device check | REV 0.1 |
-| 1 | Controller test + Learn wizard + sticks preview | REV 0.1 |
-| 2 | Connect to EMQX (settings, ping, robot status) | next |
-| 3 | Drive Rob2 (same table as `robot_operator.py --sticks`) | later |
+| 0 | Page online on GitHub Pages, device check | done (REV 0.1) |
+| 1 | Controller test + Learn wizard + sticks preview | done (REV 0.1) |
+| 2 | Connect to EMQX (settings, ping, robot status) | REV 0.2 |
+| 3 | Drive Rob2 (same table as `robot_operator.py --sticks`) | next |
 | 4 | Safety tests | later |
 | 5 | Other devices + student guide | later |
 
@@ -51,4 +51,11 @@ Controller --> this web page --> EMQX Cloud (wss 8084) --> tablet "final1" --> U
 | `manifest.json`, `icon-192.png`, `icon-512.png` | "Add to Home Screen" app icon |
 
 **No password is stored in this repository.** The EMQX password is typed once on each
-device (Step 2) and stays on that device.
+device (in **Settings**) and stays on that device.
+
+## First time on a device
+
+1. Open the link.
+2. In **Robot link → Settings**, type the EMQX user name and password (port **8084**, path `/mqtt`).
+3. Tap **Connect**. The robot shows `online` when the tablet app *final1* is running.
+4. Plug in the controller and press any button.
