@@ -1,0 +1,983 @@
+<!doctype html>
+<!--
+  Rob2 Video Test - proof of concept: the tablet's camera, live on a phone
+  ========================================================================
+  REV 0.1  (2026-10-07)
+
+  WHAT THIS PAGE IS FOR
+      Before changing the tablet app "final1", we want to KNOW that the Galaxy Tab A9 can send
+      its camera at 720p with a short delay. This page does that test with nothing but two
+      browsers:
+          the TABLET opens this page and presses  CAMERA   (it sends its camera)
+          the PHONE  opens this page and presses  VIEWER   (it shows the picture)
+
+  HOW IT WORKS (in 4 lines)
+      1. Both devices log in to EMQX, with the same user name and password as the robot.
+      2. They exchange 3 short "set-up" messages through EMQX:
+            phone  -> "hello, I want to watch"
+            tablet -> "offer"  (how to reach me + what video I can send)
+            phone  -> "answer" (how to reach me + what video I can show)
+      3. After that the VIDEO DOES NOT GO THROUGH EMQX. It goes straight from the tablet to the
+         phone over the Wi-Fi (this is called WebRTC, "peer to peer").
+      4. Both pages show live numbers (size, pictures per second, speed, lost packets, what is
+         limiting the quality) and a running clock to measure the delay with your own eyes.
+
+  SAFETY
+      * This page NEVER talks to the robot. It does not send cmd/vel or cmd/estop and it never
+        says "operator online". It only uses the topics  robot/<id>/video/...
+        (the tablet app, the robot and the joystick remote do not listen to those).
+      * One viewer at a time. The newest viewer wins.
+      * Video only, no sound.
+
+  PASSWORD
+      No address, user name or password is written in this file. You type them on each device.
+      They are saved on THAT device only, and only if you tick "Remember on this device".
+      Anyone who has your EMQX login can watch the camera, so keep it private.
+
+  Hosted on GitHub Pages next to index.html:  https://<your-name>.github.io/rob2-operator/video-test.html
+  It needs the file mqtt.min.js that is already in the same folder.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rob2 Video Test</title>
+<link rel="icon" href="icon-192.png">
+<meta name="theme-color" content="#0f1720">
+<style>
+/* Same colours as the Rob2 Operator page. They are "tokens" so light and dark mode both work. */
+:root {
+  --bg: #eef2f5;  --panel: #ffffff; --ink: #14202b; --muted: #5b6b78; --line: #d3dce3;
+  --accent: #0b7a75; --accent-ink: #ffffff;
+  --ok: #1e7f3c; --ok-bg: #e2f3e7; --warn: #8a5a00; --warn-bg: #fbefd6; --bad: #a32020; --bad-bg: #fbe3e3;
+  --key: #e7edf1;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Roboto Mono", monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1720; --panel: #17222d; --ink: #e6edf2; --muted: #93a4b1; --line: #2a3a48;
+    --accent: #3cc3b9; --accent-ink: #062a28;
+    --ok: #6ad48a; --ok-bg: #173323; --warn: #f0c060; --warn-bg: #3a2e12; --bad: #ff8a8a; --bad-bg: #3d1a1a;
+    --key: #223240;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--ink); font: 15px/1.45 var(--sans);
+  padding: calc(12px + env(safe-area-inset-top, 0px)) 16px calc(24px + env(safe-area-inset-bottom, 0px));
+}
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin: 0 auto 12px; max-width: 1100px; }
+header h1 { font-size: 20px; margin: 0; letter-spacing: .2px; }
+header .rev { font: 12px var(--mono); color: var(--muted); }
+header a { margin-left: auto; font-size: 13px; color: var(--accent); }
+main { display: grid; gap: 12px; max-width: 1100px; margin: 0 auto; grid-template-columns: 1fr; }
+@media (min-width: 860px) { main { grid-template-columns: 1fr 1fr; } .wide { grid-column: 1 / -1; } }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; min-width: 0; }
+section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pill { font: 12px var(--mono); padding: 2px 8px; border-radius: 999px; white-space: nowrap; background: var(--key); color: var(--muted); }
+.pill.ok { background: var(--ok-bg); color: var(--ok); }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+.small { font-size: 12px; color: var(--muted); }
+button, select {
+  font: 600 14px var(--sans); border-radius: 8px; padding: 9px 14px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--key); color: var(--ink);
+}
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+button.big { font-size: 16px; padding: 14px 18px; flex: 1 1 140px; }
+button.on { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+button.on .small { color: inherit; opacity: .85; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+button[disabled] { opacity: .45; cursor: default; }
+.form { display: grid; grid-template-columns: auto 1fr; gap: 8px 10px; align-items: center; margin: 10px 0; }
+.form label { font-size: 13px; color: var(--muted); }
+.form input[type=text], .form input[type=password], .form input[type=number], .form select {
+  width: 100%; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--ink); font: 14px var(--mono);
+}
+.form .span2 { grid-column: 1 / -1; }
+.note { padding: 8px 10px; border-radius: 8px; font-size: 13px; margin: 8px 0; background: var(--key); }
+.note.bad { background: var(--bad-bg); color: var(--bad); }
+.note.warn { background: var(--warn-bg); color: var(--warn); }
+.note.ok { background: var(--ok-bg); color: var(--ok); }
+details > summary { cursor: pointer; font-weight: 600; margin: 6px 0; }
+
+/* The page shows only the parts that belong to the chosen job (camera or viewer). */
+body:not([data-role="camera"]) .camOnly { display: none !important; }
+body:not([data-role="viewer"]) .viewOnly { display: none !important; }
+body:not([data-role]) .roleOnly { display: none !important; }
+
+/* ---- the pictures ---- */
+video, canvas.frozen { display: block; width: 100%; background: #000; border-radius: 8px; }
+#viewVideo { max-height: 62vh; object-fit: contain; }
+#camPreview { max-width: 360px; max-height: 40vh; object-fit: contain; }
+
+/* ---- the delay clock: big digits + 10 boxes, one box lights up every tenth of a second ---- */
+.clock { font: 700 64px/1 var(--mono); letter-spacing: 2px; text-align: center; padding: 10px 0 6px;
+         background: #000; color: #fff; border-radius: 8px 8px 0 0; font-variant-numeric: tabular-nums; }
+.tenths { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; background: #000; padding: 0 8px 10px; border-radius: 0 0 8px 8px; margin-bottom: 8px; }
+.tenths span { height: 22px; background: #333; border-radius: 3px; }
+.tenths span.on { background: #fff; }
+
+/* ---- numbers ---- */
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+td, th { padding: 4px 6px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+td:first-child { color: var(--muted); width: 44%; }
+td:last-child { font-family: var(--mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+h3 { font-size: 14px; margin: 12px 0 4px; }
+ul.marks { list-style: none; margin: 6px 0; padding: 0; display: grid; gap: 6px; }
+ul.marks li { display: grid; grid-template-columns: 84px 1fr; gap: 8px; align-items: baseline; }
+ul.marks .pill { text-align: center; overflow: hidden; text-overflow: ellipsis; }
+pre#log { font: 12px/1.4 var(--mono); background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+          padding: 8px; margin: 8px 0 0; max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Rob2 Video Test</h1>
+  <span class="rev">REV 0.1 · proof of concept · this page never talks to the robot</span>
+  <a href="./">Rob2 Operator</a>
+</header>
+
+<main>
+
+<!-- =================== 1. WHICH JOB DOES THIS DEVICE DO? =================== -->
+<section class="wide">
+  <h2>1 · This device is…</h2>
+  <div class="row">
+    <button class="big" id="btnRoleCamera">CAMERA<br><span class="small">the tablet on the robot</span></button>
+    <button class="big" id="btnRoleViewer">VIEWER<br><span class="small">the phone that watches</span></button>
+  </div>
+  <div id="msg" class="note" hidden></div>
+  <details>
+    <summary>How to do the test</summary>
+    <ol class="small">
+      <li>Tablet and phone on the <b>same home Wi-Fi</b>.</li>
+      <li>Tablet: open this page in Chrome, press <b>CAMERA</b>, type the EMQX login, press <b>START CAMERA</b> and allow the camera.</li>
+      <li>Phone: open this page, press <b>VIEWER</b>, type the EMQX login, press <b>WATCH</b>. The picture appears in 1 to 3 seconds.</li>
+      <li><b>Delay test:</b> point the tablet's camera at the phone's screen so that it sees the big clock. On the phone you now see the real clock and, in the picture, an older clock. Press <b>Freeze the picture</b> and type the clock you read in the picture.</li>
+      <li>Let it run 5 minutes, then press <b>Copy report</b> on both devices.</li>
+      <li><b>Both jobs test:</b> on the tablet put Chrome and the app "final1" in split screen, drive the robot, and look at "What limits the quality".</li>
+    </ol>
+  </details>
+</section>
+
+<!-- =================== 2. EMQX LOGIN =================== -->
+<section class="roleOnly">
+  <h2>2 · EMQX login</h2>
+  <div class="row">
+    <span class="pill" id="pillBroker">EMQX: not connected</span>
+    <span class="pill viewOnly" id="pillCamera">Camera: ?</span>
+    <span class="pill camOnly" id="pillViewer">Viewer: nobody</span>
+  </div>
+  <details id="loginBox" open>
+    <summary>Login (the same as for the robot)</summary>
+    <div class="form">
+      <label for="fHost">Broker address</label><input type="text" id="fHost" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <label for="fPort">Port</label><input type="number" id="fPort" inputmode="numeric">
+      <label for="fPath">Path</label><input type="text" id="fPath" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <label for="fUser">User name</label><input type="text" id="fUser" autocomplete="username" autocapitalize="off" spellcheck="false">
+      <label for="fPass">Password</label><input type="password" id="fPass" autocomplete="current-password">
+      <label for="fRobot">Robot id</label><input type="text" id="fRobot" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <label class="span2"><input type="checkbox" id="fShow"> Show the password</label>
+      <label class="span2"><input type="checkbox" id="fRemember"> Remember on this device (shared with the Rob2 Operator page)</label>
+    </div>
+    <div class="row"><button id="btnForget">Forget the saved login</button></div>
+  </details>
+</section>
+
+<!-- =================== 3a. CAMERA (tablet) =================== -->
+<section class="camOnly">
+  <h2>3 · Camera</h2>
+  <div class="row">
+    <button class="primary" id="btnStartCam">START CAMERA</button>
+    <button id="btnStopCam" disabled>Stop</button>
+    <span class="pill" id="pillCam">Camera: off</span>
+  </div>
+  <div class="form">
+    <label for="selCam">Which camera</label>
+    <select id="selCam"><option value="user">Front (the low-resolution one)</option><option value="environment">Rear</option></select>
+    <label for="selSize">Picture size</label>
+    <select id="selSize"><option value="1280x720">1280 × 720 (720p)</option><option value="960x540">960 × 540</option><option value="640x360">640 × 360</option></select>
+    <label for="selRate">Speed limit</label>
+    <select id="selRate"><option value="600">0.6 Mbit/s</option><option value="1200">1.2 Mbit/s</option><option value="2000">2.0 Mbit/s</option><option value="3000">3.0 Mbit/s</option></select>
+    <label for="selCodec">Video format</label>
+    <select id="selCodec"><option value="h264">H.264 (uses the tablet's video chip)</option><option value="vp8">VP8</option><option value="auto">Let the browser choose</option></select>
+  </div>
+  <p class="small">You can change these while the phone is watching. This is what the camera sees and sends:</p>
+  <video id="camPreview" autoplay muted playsinline></video>
+</section>
+
+<!-- =================== 3b. VIEWER (phone) =================== -->
+<section class="viewOnly wide">
+  <h2>3 · Picture</h2>
+  <div class="row" style="margin-bottom:8px">
+    <button class="primary" id="btnWatch">WATCH</button>
+    <button id="btnStopWatch" disabled>Stop</button>
+    <span class="pill" id="pillVideo">Video: off</span>
+  </div>
+  <!-- The delay clock. Point the tablet's camera at THIS clock. -->
+  <div class="clock" id="clock" aria-hidden="true">00.00</div>
+  <div class="tenths" id="tenths" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+  <video id="viewVideo" autoplay muted playsinline></video>
+
+  <h3>Measure the delay</h3>
+  <p class="small">Point the tablet's camera at the clock above, so the picture shows the clock too. Then:</p>
+  <div class="row"><button id="btnFreeze" disabled>Freeze the picture</button><button id="btnUnfreeze" hidden>Clear</button></div>
+  <div id="freezeBox" hidden>
+    <canvas class="frozen" id="frozen" style="margin-top:8px"></canvas>
+    <div class="form">
+      <label>Real clock at that instant</label><b id="freezeReal" style="font-family:var(--mono)">—</b>
+      <label for="fRead">Clock you read in the frozen picture</label><input type="number" id="fRead" step="0.01" inputmode="decimal" placeholder="for example 47.21">
+      <label>Delay</label><b id="freezeDelay" style="font-family:var(--mono)">type the clock from the picture</b>
+    </div>
+  </div>
+</section>
+
+<!-- =================== 4. LIVE NUMBERS =================== -->
+<section class="roleOnly wide">
+  <h2>4 · Numbers (updated every second)</h2>
+  <h3>Pass marks</h3>
+  <ul class="marks">
+    <li><span class="pill" id="mkSize">wait</span> Picture is 720p (1280 × 720)</li>
+    <li><span class="pill" id="mkFps">wait</span> 24 pictures per second or more</li>
+    <li><span class="pill" id="mkLimit">wait</span> Nothing limits the quality on the tablet</li>
+    <li><span class="pill" id="mkLoss">wait</span> Less than 1 % of the packets are lost</li>
+    <li><span class="pill" id="mkDelay">you</span> Delay under 0.40 s (measure it with the clock on the phone)</li>
+  </ul>
+  <div style="display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));">
+    <div><h3>Camera side (tablet)</h3><table id="tblCam"></table></div>
+    <div><h3>Viewer side (phone)</h3><table id="tblView"></table></div>
+  </div>
+</section>
+
+<!-- =================== 5. LOG =================== -->
+<section class="roleOnly wide">
+  <h2>5 · Log</h2>
+  <div class="row"><button id="btnCopy">Copy report</button><span class="small" id="copyMsg">The report has the numbers and this log. It does NOT contain your login.</span></div>
+  <pre id="log" aria-live="off"></pre>
+</section>
+
+</main>
+
+<script src="mqtt.min.js"></script>
+<script>
+"use strict";
+/* ===========================================================================================
+   PART A - SETTINGS YOU MAY WANT TO CHANGE
+   =========================================================================================== */
+const REV = "0.1";
+const START_OVERRIDE = (v => v === null ? undefined : Number(v))(new URLSearchParams(location.search).get("start"));   // for experiments: video-test.html?start=0
+
+// The EMQX address is the public one from the Rob2 Operator page. User name and password are
+// NOT here: you type them on the page.
+const DEFAULTS = { host: "kd6b8bb2.ala.us-east-1.emqxsl.com", port: 8084, path: "/mqtt", user: "", pass: "", robot: "bot1" };
+
+// A "STUN server" tells each device which address it has, so that the two can find each other.
+// On the same Wi-Fi it is not even needed. It never sees the video.
+const RTC_CONFIG = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+
+const MAX_FPS        = 30;      // pictures per second, at most
+const START_KBPS     = START_OVERRIDE ?? 1000;   // start the video near this speed (0 = let the browser start slowly)
+const GATHER_WAIT_MS = 1500;    // how long we wait, at most, while the browser lists its addresses
+const HELLO_GAP_MS   = 3000;    // the viewer asks again after this long (it doubles up to 15 s)
+const HELLO_GAP_MAX  = 15000;   //   -> never more than 1 small message every 3 s: far below EMQX's 10 a second
+
+/* ===========================================================================================
+   PART B - SMALL HELPERS
+   =========================================================================================== */
+const $ = id => document.getElementById(id);
+const now = () => performance.now();
+
+// A random name for this page, new every time it loads (so two phones never get mixed up).
+const SID = Array.from(crypto.getRandomValues(new Uint8Array(4)), b => b.toString(16).padStart(2, "0")).join("");
+
+const logLines = [];
+function log(text) {                                // one line in the log, with the time of day
+  const line = new Date().toTimeString().slice(0, 8) + "  " + text;
+  logLines.push(line); if (logLines.length > 300) logLines.shift();
+  const el = $("log"); el.textContent = logLines.slice(-80).join("\n"); el.scrollTop = el.scrollHeight;
+}
+function say(kind, text) {                          // the message line under the two big buttons
+  const el = $("msg");
+  if (!text) { el.hidden = true; return; }
+  el.className = "note " + kind; el.textContent = text; el.hidden = false;
+}
+function setPill(id, kind, text) { const el = $(id); el.className = el.className.replace(/\b(ok|warn|bad)\b/g, "").trim() + (kind ? " " + kind : ""); el.textContent = text; }
+function num(x, digits = 0) { return (typeof x === "number" && isFinite(x)) ? x.toFixed(digits) : "—"; }
+function loadJson(key) { try { return JSON.parse(localStorage.getItem(key) || "{}") || {}; } catch (e) { return {}; } }
+function saveJson(key, obj) { try { localStorage.setItem(key, JSON.stringify(obj)); } catch (e) {} }
+
+/* ===========================================================================================
+   PART C - THE STATE OF THIS PAGE (everything it has to remember while it runs)
+   =========================================================================================== */
+let role = null;                // "camera" or "viewer"
+let running = false;            // START CAMERA or WATCH was pressed
+let client = null, T = null;    // the EMQX connection and the topic names
+let mqttUp = false, refused = false, everUp = false;
+
+let pc = null;                  // the direct video link to the other device (RTCPeerConnection)
+let dc = null;                  // a small side channel on that link: the two pages swap their numbers
+let stream = null, track = null, sender = null;       // camera side: the camera and the thing that sends it
+let viewer = null;              // camera side: who is watching { sid, n }
+let lastViewer = null;          // camera side: the last phone we told everyone about
+let badSince = 0;               // when the video link started to look broken
+
+// viewer side
+let camState = "?", camSid = null;     // what the camera page says about itself
+let attempt = 0;                        // number of our latest "hello"
+let helloAt = -1e9, helloGap = HELLO_GAP_MS, awaitingOffer = false;
+let takenOver = false;                  // another phone took the camera
+let helloSent = false;                  // we asked for the picture at least once since WATCH was pressed
+let firstFrameSeen = false;
+
+// numbers
+let mine = {}, far = {}, farAt = 0;     // this device's numbers, and the other device's (they arrive on "dc")
+let prev = {}, prevAt = 0;              // counters at the previous second (to compute "per second")
+let lossRing = [];                      // viewer: the last 10 seconds of lost / received packets
+let sum = null;                         // totals for the report
+
+const SETTINGS_KEY = "rob2.settings.v1";    // the same box as the Rob2 Operator page: one login for both pages
+const VIDEO_KEY    = "rob2.video.v1";       // this page's own choices (job, camera, size, speed, format)
+
+function topics(robot) {
+  const base = `robot/${robot}/video`;
+  return { camera: `${base}/camera`,      // camera -> everyone, kept by EMQX: "ready" or "offline"
+           hello:  `${base}/hello`,       // viewer -> camera: "I want to watch"
+           offer:  `${base}/offer`,       // camera -> viewer
+           answer: `${base}/answer` };    // viewer -> camera
+}
+
+/* ===========================================================================================
+   PART D - CHOOSING THE JOB, AND THE LOGIN FORM
+   =========================================================================================== */
+function chooseRole(r) {
+  if (running) stopAll("you changed the job of this device");
+  role = r; document.body.dataset.role = r;
+  $("btnRoleCamera").classList.toggle("on", r === "camera");
+  $("btnRoleViewer").classList.toggle("on", r === "viewer");
+  saveJson(VIDEO_KEY, Object.assign(loadJson(VIDEO_KEY), { role: r }));
+  say("", "");
+  renderNumbers();
+}
+$("btnRoleCamera").addEventListener("click", () => chooseRole("camera"));
+$("btnRoleViewer").addEventListener("click", () => chooseRole("viewer"));
+
+function fillLogin(s) {
+  $("fHost").value = s.host; $("fPort").value = s.port; $("fPath").value = s.path;
+  $("fUser").value = s.user; $("fPass").value = s.pass; $("fRobot").value = s.robot;
+}
+function readLogin() {
+  return { host: $("fHost").value.trim().replace(/^[a-z]+:\/\//i, "").replace(/[:/].*$/, ""),
+           port: parseInt($("fPort").value, 10) || DEFAULTS.port,
+           path: "/" + $("fPath").value.trim().replace(/^\/+/, ""),
+           user: $("fUser").value.trim(), pass: $("fPass").value, robot: $("fRobot").value.trim() || DEFAULTS.robot };
+}
+{ // fill the form with what this device remembers
+  const saved = loadJson(SETTINGS_KEY);
+  fillLogin(Object.assign({}, DEFAULTS, saved));
+  $("fRemember").checked = !!saved.user;
+  const v = loadJson(VIDEO_KEY);
+  $("selCam").value = v.cam || "user"; $("selSize").value = v.size || "1280x720";
+  $("selRate").value = v.rate || "1200"; $("selCodec").value = v.codec || "h264";
+  const wanted = new URLSearchParams(location.search).get("role") || v.role;      // video-test.html?role=camera also works
+  if (wanted === "camera" || wanted === "viewer") chooseRole(wanted);
+}
+$("fShow").addEventListener("change", e => { $("fPass").type = e.target.checked ? "text" : "password"; });
+$("btnForget").addEventListener("click", () => {
+  try { localStorage.removeItem(SETTINGS_KEY); } catch (e) {}
+  fillLogin(DEFAULTS); $("fRemember").checked = false;
+  say("ok", "The saved login was removed from this device.");
+});
+function loginOrComplain() {                        // returns the login, or null (with a message) if something is missing
+  const s = readLogin();
+  if (!s.host || !s.user || !s.pass) { say("bad", "Fill in the broker address, the user name and the password first."); $("loginBox").open = true; return null; }
+  if ($("fRemember").checked) saveJson(SETTINGS_KEY, Object.assign(loadJson(SETTINGS_KEY), s));   // keeps the operator page's other settings
+  return s;
+}
+
+/* ===========================================================================================
+   PART E - EMQX (only for the 3 set-up messages and "camera ready / offline")
+   =========================================================================================== */
+function connectMqtt(s) {
+  T = topics(s.robot); mqttUp = false; refused = false; everUp = false;
+  // Secure WebSocket (wss). Plain ws is only used for a test broker on this same computer.
+  const local = s.host === "localhost" || s.host.startsWith("127.");
+  const url = `${local ? "ws" : "wss"}://${s.host}:${s.port}${s.path}`;
+  const options = {
+    clientId: `video-${role === "camera" ? "cam" : "view"}-${s.robot}-${SID}`,
+    username: s.user, password: s.pass,
+    protocolVersion: 5, clean: true, keepalive: 20, reconnectPeriod: 2000, connectTimeout: 10000,
+  };
+  // "Last Will": if the tablet's page vanishes (closed, Wi-Fi lost), EMQX says "offline" for it.
+  if (role === "camera") options.will = { topic: T.camera, payload: JSON.stringify({ state: "offline", cam: SID }), qos: 1, retain: true };
+  setPill("pillBroker", "warn", "EMQX: connecting…");
+  log("EMQX: connecting…");
+  const c = mqtt.connect(url, options);
+  client = c;
+
+  c.on("connect", () => {
+    if (c !== client) return;
+    mqttUp = true; everUp = true;
+    setPill("pillBroker", "ok", "EMQX: connected"); log("EMQX: connected");
+    $("loginBox").open = false;
+    if (role === "camera") {
+      c.subscribe({ [T.hello]: { qos: 1 }, [T.answer]: { qos: 1 }, [T.camera]: { qos: 1 } });
+      announceCamera("ready");
+    } else {
+      c.subscribe({ [T.camera]: { qos: 1 }, [T.offer]: { qos: 1 } });
+    }
+  });
+  c.on("message", (topic, payload) => {
+    if (c !== client) return;
+    let m; try { m = JSON.parse(payload.toString()); } catch (e) { return; }
+    if (!m || typeof m !== "object") return;
+    if (role === "camera") {
+      if (topic === T.hello) onHello(m);
+      else if (topic === T.answer) onAnswer(m);
+      else if (topic === T.camera && m.state === "ready" && m.cam && m.cam !== SID) {
+        log("WARNING: another CAMERA page is open for this robot. Close one of them.");
+        say("warn", "Another CAMERA page is open for this robot. Close one of them, or the viewer gets two answers.");
+      }
+    } else {
+      if (topic === T.camera) onCameraState(m);
+      else if (topic === T.offer) onOffer(m);
+    }
+  });
+  c.on("error", (err) => {
+    if (c !== client) return;
+    const text = String((err && err.message) || err), code = err && err.code;
+    if (code === 134 || code === 135 || code === 4 || code === 5 || /not authorized|bad user ?name/i.test(text)) {
+      refused = true;
+      stopAll("EMQX refused the login");
+      setPill("pillBroker", "bad", "EMQX: login refused");
+      say("bad", "EMQX refused the user name or password. Check them and try again.");
+      $("loginBox").open = true;
+    } else log("EMQX problem: " + text);
+  });
+  c.on("close", () => {
+    if (c !== client) return;
+    mqttUp = false;
+    if (refused) return;
+    if (!everUp) { setPill("pillBroker", "bad", "EMQX: cannot connect"); say("bad", "Could not reach EMQX. Check the address, the port (8084), the path (/mqtt) and the internet. Trying again…"); }
+    else { setPill("pillBroker", "warn", "EMQX: reconnecting…"); log("EMQX: connection lost, trying again (a video that is already running keeps going)"); }
+  });
+}
+function send(topic, obj, retain = false) {        // one set-up message through EMQX
+  if (client && mqttUp) client.publish(topic, JSON.stringify(obj), { qos: 1, retain });
+}
+function closeMqtt() {
+  const c = client; client = null; mqttUp = false;
+  if (!c) return;
+  try { c.end(); } catch (e) {}
+  setPill("pillBroker", "", "EMQX: not connected");
+}
+
+/* ===========================================================================================
+   PART F - THINGS BOTH JOBS NEED FOR THE DIRECT VIDEO LINK
+   =========================================================================================== */
+// The browser needs a moment to list all the addresses where it can be reached ("ICE candidates").
+// We wait until the list is complete and send it in ONE message (instead of 10 small ones).
+function gatheringDone(p) {
+  if (p.iceGatheringState === "complete") return Promise.resolve();
+  return new Promise(resolve => {
+    const timer = setTimeout(done, GATHER_WAIT_MS);
+    function done() { clearTimeout(timer); p.removeEventListener("icegatheringstatechange", check); resolve(); }
+    function check() { if (p.iceGatheringState === "complete") done(); }
+    p.addEventListener("icegatheringstatechange", check);
+  });
+}
+// The side channel: once a second each page sends its numbers to the other one.
+function wireChannel(ch, myPc) {
+  dc = ch;
+  ch.onmessage = e => { try { far = JSON.parse(e.data); farAt = now(); } catch (err) {} };
+  ch.onclose = () => { if (pc === myPc) dropPeer(role === "camera" ? "the viewer left" : "the camera closed the video link"); };
+}
+// Close the direct link (the EMQX connection stays).
+function dropPeer(why) {
+  const p = pc; if (!p) return;
+  pc = null; dc = null; sender = null; badSince = 0; far = {}; mine = {}; prev = {}; lossRing = [];
+  try { p.close(); } catch (e) {}
+  log("Video link closed: " + why);
+  if (role === "camera") { viewer = null; setPill("pillViewer", "", "Viewer: nobody"); }
+  else {
+    $("viewVideo").srcObject = null; $("btnFreeze").disabled = true;
+    setPill("pillVideo", running ? "warn" : "", running ? "Video: waiting…" : "Video: off");
+    helloAt = now() - helloGap + 1000;             // ask again in about 1 second
+  }
+}
+
+/* ===========================================================================================
+   PART G - THE CAMERA JOB (tablet)
+   =========================================================================================== */
+function wantedSize() { const [w, h] = $("selSize").value.split("x").map(Number); return { w, h }; }
+function rateLimit() { return parseInt($("selRate").value, 10) * 1000; }      // bits per second
+
+async function openCamera() {
+  if (stream) stream.getTracks().forEach(t => t.stop());     // Android can open only one camera at a time
+  const { w, h } = wantedSize();
+  stream = await navigator.mediaDevices.getUserMedia({
+    audio: false,
+    video: { facingMode: { ideal: $("selCam").value }, width: { ideal: w }, height: { ideal: h }, frameRate: { ideal: MAX_FPS, max: MAX_FPS } },
+  });
+  track = stream.getVideoTracks()[0];
+  try { track.contentHint = "motion"; } catch (e) {}          // "smooth movement matters more than sharp detail"
+  track.onended  = () => { log("CAMERA STOPPED by the tablet (another app took it, or permission was removed)"); setPill("pillCam", "bad", "Camera: stopped"); };
+  track.onmute   = () => { log("Camera paused by the tablet (page hidden?)"); setPill("pillCam", "warn", "Camera: paused"); };
+  track.onunmute = () => { log("Camera running again"); setPill("pillCam", "ok", "Camera: on"); };
+  $("camPreview").srcObject = stream;
+  const st = track.getSettings();
+  log(`Camera on: "${track.label}" gives ${st.width}×${st.height} at ${num(st.frameRate)} pictures a second (asked for ${w}×${h})`);
+  setPill("pillCam", "ok", `Camera: on ${st.width}×${st.height}`);
+  if (sender) await sender.replaceTrack(track);               // a viewer is watching: swap the camera without a new set-up
+}
+
+async function startCamera() {
+  const s = loginOrComplain(); if (!s) return;
+  if (!window.isSecureContext || !navigator.mediaDevices) { say("bad", "The camera only works on a secure page (https://…)."); return; }
+  $("btnStartCam").disabled = true;
+  try { await openCamera(); }
+  catch (e) {
+    $("btnStartCam").disabled = false;
+    const why = e.name === "NotAllowedError" ? "You (or the tablet) did not allow the camera. Allow it in the browser's site settings."
+              : e.name === "NotFoundError" ? "No camera was found."
+              : e.name === "NotReadableError" ? "The camera is busy: another app is using it."
+              : "Camera problem: " + e.message;
+    say("bad", why); log("Camera failed: " + e.name + " " + e.message); return;
+  }
+  running = true; startSummary(); keepScreenOn(true);
+  $("btnStopCam").disabled = false;
+  say("ok", "Camera is on. Now press WATCH on the phone.");
+  connectMqtt(s);
+}
+// "ready" also says WHO is watching, so that a phone that was replaced knows it and stays quiet.
+function announceCamera(state) { send(T.camera, { state, cam: SID, rev: REV, viewer: viewer ? viewer.sid : null }, true); }
+
+// The viewer said "hello": build a new direct link and send our OFFER.
+async function onHello(m) {
+  if (!running || !track || typeof m.viewer !== "string") return;
+  dropPeer("a viewer asked for the picture");                 // one viewer at a time: the newest wins
+  const changed = !lastViewer || lastViewer !== m.viewer;
+  viewer = { sid: m.viewer, n: m.n }; lastViewer = m.viewer;
+  if (changed) announceCamera("ready");                       // tells every phone: "this one is watching now"
+  log(`Viewer ${viewer.sid} says hello (try ${viewer.n}). Preparing the offer…`);
+  setPill("pillViewer", "warn", "Viewer: connecting…");
+  const p = new RTCPeerConnection(RTC_CONFIG); pc = p;
+  wireChannel(p.createDataChannel("numbers"), p);
+  const tr = p.addTransceiver(track, { direction: "sendonly", streams: [stream],
+                                       sendEncodings: [{ maxBitrate: rateLimit(), maxFramerate: MAX_FPS }] });
+  sender = tr.sender;
+  preferCodec(tr);
+  p.onconnectionstatechange = () => {
+    if (p !== pc) return;
+    log("Video link: " + p.connectionState);
+    if (p.connectionState === "connected") { setPill("pillViewer", "ok", "Viewer: watching"); tuneSender(); }
+  };
+  try {
+    await p.setLocalDescription(await p.createOffer());
+    await gatheringDone(p);
+    if (p !== pc) return;                                      // a newer hello arrived while we were waiting
+    send(T.offer, { to: viewer.sid, n: viewer.n, cam: SID, sdp: p.localDescription.sdp });
+    log(`Offer sent (${p.localDescription.sdp.length} letters, ${(p.localDescription.sdp.match(/a=candidate/g) || []).length} addresses)`);
+  } catch (e) { log("Could not make the offer: " + e.message); if (p === pc) dropPeer("offer failed"); }
+}
+async function onAnswer(m) {
+  const p = pc;
+  if (!p || !viewer || m.from !== viewer.sid || m.n !== viewer.n || p.signalingState !== "have-local-offer") return;
+  try {
+    try { await p.setRemoteDescription({ type: "answer", sdp: fastStart(m.sdp) }); }
+    catch (e) { await p.setRemoteDescription({ type: "answer", sdp: m.sdp }); }      // the plain answer, if the browser did not like our extra line
+    log("Answer received. The two devices are now looking for each other…");
+  } catch (e) { log("The answer was not accepted: " + e.message); if (p === pc) dropPeer("bad answer"); }
+}
+// Chrome starts every video link slowly (0.3 Mbit/s: a small, blurry picture) and needs 10 to 20
+// seconds to work its way up to 720p. This adds one line to the phone's answer that says
+// "start near the wanted speed right away". Browsers that do not know the line ignore it.
+function fastStart(sdp) {
+  const kbps = Math.round(Math.min(rateLimit() / 1000, START_KBPS));
+  const m = sdp.match(/^m=video \d+ [A-Z\/]+ (\d+)/m);          // the number of the video format that was agreed
+  if (!kbps || !m) return sdp;
+  const pt = m[1], extra = `x-google-start-bitrate=${kbps}`;
+  const line = new RegExp(`^a=fmtp:${pt} (.*)$`, "m");
+  if (line.test(sdp)) return sdp.replace(line, (all, rest) => `a=fmtp:${pt} ${rest};${extra}`);
+  return sdp.replace(new RegExp(`^(a=rtpmap:${pt} .*)$`, "m"), `$1\r\na=fmtp:${pt} ${extra}`);
+}
+
+// Ask for H.264 first: the tablet has a chip that makes H.264 without loading the processor,
+// and every iPhone can show it. If the browser has no H.264, it falls back to the next format.
+function preferCodec(tr) {
+  const want = $("selCodec").value;
+  if (want === "auto" || !tr.setCodecPreferences) return;
+  const order = list => {
+    const mine = list.filter(c => c.mimeType.toLowerCase() === "video/" + want);
+    if (!mine.length) return null;
+    const score = c => (/packetization-mode=1/.test(c.sdpFmtpLine || "") ? 2 : 0) + (/profile-level-id=42e0/.test(c.sdpFmtpLine || "") ? 1 : 0);
+    if (want === "h264") mine.sort((a, b) => score(b) - score(a));
+    return mine.concat(list.filter(c => c.mimeType.toLowerCase() !== "video/" + want));
+  };
+  // Browsers disagree about which list they want here, so we try both.
+  for (const side of [window.RTCRtpReceiver, window.RTCRtpSender]) {
+    try {
+      const caps = side && side.getCapabilities && side.getCapabilities("video");
+      const list = caps && order(caps.codecs);
+      if (list) { tr.setCodecPreferences(list); return; }
+    } catch (e) {}
+  }
+  log(`This browser cannot send ${want.toUpperCase()}: it will choose another format.`);
+}
+// Apply the speed limit, and tell the browser: "when things get tight, keep it SMOOTH (lower the
+// sharpness, not the number of pictures per second)". That is what you want for driving.
+async function tuneSender() {
+  if (!sender) return;
+  try {
+    const prm = sender.getParameters();
+    if (!prm.encodings || !prm.encodings.length) return;
+    prm.encodings[0].maxBitrate = rateLimit(); prm.encodings[0].maxFramerate = MAX_FPS;
+    prm.degradationPreference = "maintain-framerate";
+    await sender.setParameters(prm);
+  } catch (e) { log("Could not set the speed limit: " + e.message); }
+}
+function saveVideoChoices() {
+  saveJson(VIDEO_KEY, Object.assign(loadJson(VIDEO_KEY), { cam: $("selCam").value, size: $("selSize").value, rate: $("selRate").value, codec: $("selCodec").value }));
+}
+$("selRate").addEventListener("change", () => { saveVideoChoices(); if (running) { log("Speed limit now " + $("selRate").value + " kbit/s"); tuneSender(); } });
+for (const id of ["selCam", "selSize"]) $(id).addEventListener("change", async () => {
+  saveVideoChoices(); if (!running) return;
+  try { await openCamera(); } catch (e) { log("Could not switch the camera: " + e.message); say("bad", "Could not switch the camera: " + e.message); }
+});
+$("selCodec").addEventListener("change", () => { saveVideoChoices(); if (pc) dropPeer("the video format was changed (the viewer reconnects by itself)"); });
+$("btnStartCam").addEventListener("click", startCamera);
+$("btnStopCam").addEventListener("click", () => stopAll("you pressed Stop"));
+
+/* ===========================================================================================
+   PART H - THE VIEWER JOB (phone)
+   =========================================================================================== */
+function startWatching() {
+  if (running && takenOver) {                   // "take the picture back" from the other phone
+    takenOver = false; helloAt = -1e9; helloGap = HELLO_GAP_MS; awaitingOffer = false;
+    $("btnWatch").disabled = true; say("", ""); return;
+  }
+  const s = loginOrComplain(); if (!s) return;
+  if (!window.RTCPeerConnection) { say("bad", "This browser cannot show live video (no WebRTC)."); return; }
+  running = true; takenOver = false; helloSent = false; camState = "?"; camSid = null; helloAt = -1e9; helloGap = HELLO_GAP_MS; awaitingOffer = false;
+  startSummary(); keepScreenOn(true);
+  $("btnWatch").disabled = true; $("btnStopWatch").disabled = false;
+  setPill("pillVideo", "warn", "Video: waiting…"); setPill("pillCamera", "", "Camera: ?");
+  say("", "");
+  $("viewVideo").play().catch(() => {});       // iPhone: start the player while we still are inside your tap
+  connectMqtt(s);
+}
+function onCameraState(m) {
+  const was = camState, wasSid = camSid;
+  camState = m.state === "ready" ? "ready" : "offline"; camSid = m.cam || null;
+  setPill("pillCamera", camState === "ready" ? "ok" : "warn", "Camera: " + (camState === "ready" ? "ready" : "offline"));
+  if (camState !== was) log("The camera page says: " + camState);
+  if (camState === "ready" && wasSid && camSid !== wasSid && pc) dropPeer("the camera page was restarted");
+  if (camState === "ready" && was !== "ready") { helloAt = -1e9; helloGap = HELLO_GAP_MS; awaitingOffer = false; }
+  if (camState !== "ready" && !pc && running) say("warn", "The camera page is not running. Press START CAMERA on the tablet.");
+  // One viewer at a time. The camera says who is watching. If it is another phone, we stay quiet
+  // (otherwise two phones would steal the picture from each other for ever).
+  if (running && helloSent && camState === "ready" && m.viewer) {
+    const other = m.viewer !== SID;
+    if (other && !takenOver) {
+      takenOver = true; awaitingOffer = false; dropPeer("another device is watching now");
+      setPill("pillVideo", "warn", "Video: taken by another device"); $("btnWatch").disabled = false;
+      say("warn", "Another device is watching the camera now (one viewer at a time). Press WATCH to take the picture back.");
+    } else if (!other && takenOver) { takenOver = false; $("btnWatch").disabled = true; say("", ""); }
+  }
+}
+function sendHello() {
+  if (awaitingOffer) helloGap = Math.min(helloGap * 2, HELLO_GAP_MAX);    // no answer last time: wait longer before asking again
+  attempt++; helloAt = now(); awaitingOffer = true; firstFrameSeen = false; helloSent = true;
+  send(T.hello, { viewer: SID, n: attempt });
+  log(`Hello sent to the camera (try ${attempt})`);
+  setPill("pillVideo", "warn", "Video: asking the camera…");
+}
+// The camera's OFFER arrived: build our end of the direct link and send the ANSWER.
+async function onOffer(m) {
+  if (!running) return;
+  if (m.to !== SID || m.n !== attempt || pc || takenOver) return;     // for another phone, an old offer, or a second copy
+  awaitingOffer = false;
+  const p = new RTCPeerConnection(RTC_CONFIG); pc = p;
+  p.ondatachannel = e => wireChannel(e.channel, p);
+  p.ontrack = e => {
+    // "Show every picture as soon as it arrives": do not keep a safety buffer.
+    try { e.receiver.jitterBufferTarget = 0; } catch (err) {}
+    try { e.receiver.playoutDelayHint = 0; } catch (err) {}
+    const v = $("viewVideo"); v.srcObject = e.streams[0] || new MediaStream([e.track]); v.play().catch(() => {});
+  };
+  p.onconnectionstatechange = () => {
+    if (p !== pc) return;
+    log("Video link: " + p.connectionState);
+    if (p.connectionState === "connected") { helloGap = HELLO_GAP_MS; setPill("pillVideo", "ok", "Video: live"); say("", ""); }
+  };
+  try {
+    await p.setRemoteDescription({ type: "offer", sdp: m.sdp });
+    await p.setLocalDescription(await p.createAnswer());
+    await gatheringDone(p);
+    if (p !== pc) return;
+    send(T.answer, { from: SID, n: m.n, sdp: p.localDescription.sdp });
+    log("Offer received, answer sent. The two devices are now looking for each other…");
+    setPill("pillVideo", "warn", "Video: connecting…");
+  } catch (e) { log("Could not answer the offer: " + e.message); if (p === pc) dropPeer("answer failed"); }
+}
+$("viewVideo").addEventListener("playing", () => {
+  if (!pc || firstFrameSeen) return;
+  firstFrameSeen = true; $("btnFreeze").disabled = false;
+  log(`FIRST PICTURE ${num(now() - helloAt)} ms after the hello`);
+});
+$("btnWatch").addEventListener("click", startWatching);
+$("btnStopWatch").addEventListener("click", () => stopAll("you pressed Stop"));
+
+// Once a second: is the link healthy? If not, close it and ask again.
+function watchdog() {
+  if (!running) return;
+  const t = now();
+  if (pc) {
+    const st = pc.connectionState;
+    if (st === "connected") badSince = 0;
+    else if (st === "failed" || st === "closed") dropPeer("the video link failed");
+    else if (st === "disconnected") { if (!badSince) badSince = t; else if (t - badSince > 5000) dropPeer("no video data for 5 seconds"); }
+    else { if (!badSince) badSince = t; else if (t - badSince > 15000) dropPeer("the two devices could not find each other in 15 seconds"); }
+  }
+  if (role !== "viewer" || pc || takenOver || !mqttUp || camState !== "ready") return;
+  if (t - helloAt >= helloGap) sendHello();
+}
+
+/* ---- the delay clock (viewer) ---- */
+const clockNow = () => (now() / 1000) % 100;             // seconds, from 00.00 to 99.99
+const clockText = c => c.toFixed(2).padStart(5, "0");
+let lastTenth = -1;
+function drawClock() {
+  if (role === "viewer") {
+    const c = clockNow(); $("clock").textContent = clockText(c);
+    const tenth = Math.floor(c * 10) % 10;
+    if (tenth !== lastTenth) { const boxes = $("tenths").children; for (let i = 0; i < 10; i++) boxes[i].classList.toggle("on", i === tenth); lastTenth = tenth; }
+  }
+  requestAnimationFrame(drawClock);
+}
+requestAnimationFrame(drawClock);
+
+let freezeAt = null;
+$("btnFreeze").addEventListener("click", () => {
+  const v = $("viewVideo"); if (!v.videoWidth) return;
+  freezeAt = clockNow();                                   // the REAL clock at this instant…
+  const cv = $("frozen"); cv.width = v.videoWidth; cv.height = v.videoHeight;
+  cv.getContext("2d").drawImage(v, 0, 0);                  // …and the picture that is on the screen at this instant
+  $("freezeReal").textContent = clockText(freezeAt);
+  $("freezeBox").hidden = false; $("btnUnfreeze").hidden = false; $("fRead").value = ""; showDelay();
+});
+$("btnUnfreeze").addEventListener("click", () => { $("freezeBox").hidden = true; $("btnUnfreeze").hidden = true; freezeAt = null; });
+function showDelay() {
+  const read = parseFloat($("fRead").value);
+  if (freezeAt === null || !isFinite(read)) { $("freezeDelay").textContent = "type the clock from the picture"; return; }
+  const d = ((freezeAt - read) % 100 + 100) % 100;          // the clock restarts at 100, so we count "around the corner"
+  if (d > 10) { $("freezeDelay").textContent = "that does not look right, read the clock again"; return; }
+  $("freezeDelay").textContent = `${d.toFixed(2)} s  →  ${d < 0.4 ? "PASS (under 0.40 s)" : "too slow (0.40 s or more)"}`;
+  setPill("mkDelay", d < 0.4 ? "ok" : "bad", d.toFixed(2) + " s");
+  log(`DELAY measured with the clock: ${d.toFixed(2)} s (real ${clockText(freezeAt)}, picture ${read.toFixed(2)})`);
+}
+$("fRead").addEventListener("change", showDelay);
+
+/* ===========================================================================================
+   PART I - THE LIVE NUMBERS (both jobs)
+   The browser keeps counters about the video link ("getStats"). Once a second we read them,
+   compute "per second" values, show them, and send them to the other device.
+   =========================================================================================== */
+function delta(key, value) {                              // how much a counter grew since the last second
+  const d = (typeof value === "number" && typeof prev[key] === "number") ? value - prev[key] : undefined;
+  if (typeof value === "number") prev[key] = value;
+  return d;
+}
+function pathWord(local, remote) {                        // how the video travels
+  if (!local) return undefined;
+  const types = [local.candidateType, remote && remote.candidateType];
+  const how = types.includes("relay") ? "through a relay server" : types.includes("srflx") ? "direct, through the internet" : "direct, same network";
+  return `${how} (${types[0]}→${types[1] || "?"}, ${local.protocol || "udp"})`;
+}
+async function readNumbers() {
+  const p = pc;
+  if (!p || p.connectionState !== "connected") { mine = {}; return; }
+  let rep; try { rep = await p.getStats(); } catch (e) { return; }
+  if (p !== pc) return;
+  const t = now(), dt = prevAt ? (t - prevAt) / 1000 : 1; prevAt = t;
+  let out, inb, rin, pair, pairId; const byId = {};
+  rep.forEach(s => {
+    byId[s.id] = s;
+    const video = (s.kind || s.mediaType) === "video";
+    if (s.type === "outbound-rtp" && video) out = s;
+    else if (s.type === "inbound-rtp" && video) inb = s;
+    else if (s.type === "remote-inbound-rtp" && video) rin = s;
+    else if (s.type === "transport" && s.selectedCandidatePairId) pairId = s.selectedCandidatePairId;
+    else if (s.type === "candidate-pair" && s.nominated && s.state === "succeeded" && !pair) pair = s;
+  });
+  if (pairId && byId[pairId]) pair = byId[pairId];
+  const path = pair ? pathWord(byId[pair.localCandidateId], byId[pair.remoteCandidateId]) : undefined;
+  const rtt = pair && typeof pair.currentRoundTripTime === "number" ? pair.currentRoundTripTime * 1000 : undefined;
+  const codecOf = s => { const c = s && byId[s.codecId]; return c ? c.mimeType.split("/")[1] : undefined; };
+
+  if (role === "camera" && out) {
+    const frames = delta("enc", out.framesEncoded), encTime = delta("encT", out.totalEncodeTime), bytes = delta("bytes", out.bytesSent);
+    const st = track ? track.getSettings() : {};
+    mine = {
+      w: out.frameWidth || st.width, h: out.frameHeight || st.height,
+      fps: typeof out.framesPerSecond === "number" ? out.framesPerSecond : (frames !== undefined ? frames / dt : undefined),
+      kbps: bytes !== undefined ? bytes * 8 / dt / 1000 : undefined, cap: rateLimit() / 1000,
+      codec: codecOf(out), impl: out.encoderImplementation, hw: out.powerEfficientEncoder,
+      limit: out.qualityLimitationReason, limDur: out.qualityLimitationDurations,
+      encMs: frames > 0 && encTime !== undefined ? encTime / frames * 1000 : undefined,
+      rttMs: rin && typeof rin.roundTripTime === "number" ? rin.roundTripTime * 1000 : rtt,
+      farLost: rin && typeof rin.fractionLost === "number" ? rin.fractionLost * 100 : undefined,
+      room: pair && pair.availableOutgoingBitrate ? pair.availableOutgoingBitrate / 1000 : undefined,
+      resend: out.nackCount, path, hidden: document.hidden,
+    };
+  } else if (role === "viewer" && inb) {
+    const frames = delta("dec", inb.framesDecoded), decTime = delta("decT", inb.totalDecodeTime), bytes = delta("bytes", inb.bytesReceived);
+    const jb = delta("jb", inb.jitterBufferDelay), jbN = delta("jbN", inb.jitterBufferEmittedCount);
+    const lost = delta("lost", inb.packetsLost) || 0, got = delta("got", inb.packetsReceived) || 0;
+    lossRing.push([lost, got]); if (lossRing.length > 10) lossRing.shift();
+    const L = lossRing.reduce((a, x) => a + x[0], 0), G = lossRing.reduce((a, x) => a + x[1], 0);
+    const v = $("viewVideo");
+    mine = {
+      w: inb.frameWidth || v.videoWidth, h: inb.frameHeight || v.videoHeight,
+      fps: typeof inb.framesPerSecond === "number" ? inb.framesPerSecond : (frames !== undefined ? frames / dt : undefined),
+      kbps: bytes !== undefined ? bytes * 8 / dt / 1000 : undefined,
+      codec: codecOf(inb), impl: inb.decoderImplementation, hw: inb.powerEfficientDecoder,
+      lostPct: L + G > 0 ? Math.max(0, L) / (L + G) * 100 : undefined, lostAll: inb.packetsLost, gotAll: inb.packetsReceived,
+      jbMs: jbN > 0 && jb !== undefined ? jb / jbN * 1000 : undefined,
+      decMs: frames > 0 && decTime !== undefined ? decTime / frames * 1000 : undefined,
+      freezes: inb.freezeCount, freezeS: inb.totalFreezesDuration, dropped: inb.framesDropped,
+      rttMs: rtt, path,
+    };
+  }
+  if (dc && dc.readyState === "open") { try { dc.send(JSON.stringify(mine)); } catch (e) {} }
+  addToSummary();
+}
+
+const LIMIT_WORD = { none: "nothing (good)", cpu: "the PROCESSOR is too slow", bandwidth: "the NETWORK is too slow", other: "something else" };
+const hwWord = hw => hw === true ? "hardware (video chip)" : hw === false ? "software (processor)" : "";
+function rows(table, list) { $(table).innerHTML = list.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join(""); }
+// Where does the delay come from? An ESTIMATE from the counters. The clock test is the real measurement.
+function delayGuess(cam, view) {
+  if (typeof view.jbMs !== "number") return undefined;
+  const parts = { encode: cam.encMs || 0, network: (view.rttMs || 0) / 2, buffer: view.jbMs, decode: view.decMs || 0, "camera+screen": 60 };
+  return { total: Object.values(parts).reduce((a, b) => a + b, 0), parts };
+}
+function renderNumbers() {
+  if (!role) return;
+  const farFresh = now() - farAt < 3500 ? far : {};
+  const cam = role === "camera" ? mine : farFresh, view = role === "viewer" ? mine : farFresh;
+  const lim = cam.limDur || {};
+  rows("tblCam", [
+    ["Sending", cam.w ? `${cam.w} × ${cam.h} at ${num(cam.fps)} a second` : "—"],
+    ["Speed", cam.kbps !== undefined ? `${num(cam.kbps)} kbit/s (limit ${num(cam.cap)})` : "—"],
+    ["Format, made by", cam.codec ? [cam.codec, hwWord(cam.hw), cam.impl].filter(Boolean).join(" · ") : "—"],
+    ["What limits the quality", cam.limit ? (LIMIT_WORD[cam.limit] || cam.limit) : (cam.w ? "not reported by this browser" : "—")],
+    ["Time limited so far", cam.limDur ? `processor ${num(lim.cpu)} s · network ${num(lim.bandwidth)} s` : "—"],
+    ["Time to pack one picture", cam.encMs !== undefined ? num(cam.encMs, 1) + " ms" : "—"],
+    ["Round trip to the phone", cam.rttMs !== undefined ? num(cam.rttMs) + " ms" : "—"],
+    ["Room on the network", cam.room ? num(cam.room) + " kbit/s" : "—"],
+    ["Page hidden on the tablet", cam.hidden === undefined ? "—" : cam.hidden ? "YES (camera may pause)" : "no"],
+    ["Path", cam.path || "—"],
+  ]);
+  const g = delayGuess(cam, view);
+  rows("tblView", [
+    ["Receiving", view.w ? `${view.w} × ${view.h} at ${num(view.fps)} a second` : "—"],
+    ["Speed", view.kbps !== undefined ? num(view.kbps) + " kbit/s" : "—"],
+    ["Format, shown by", view.codec ? [view.codec, hwWord(view.hw), view.impl].filter(Boolean).join(" · ") : "—"],
+    ["Lost packets (last 10 s)", view.lostPct !== undefined ? `${num(view.lostPct, 1)} %  (all: ${num(view.lostAll)} of ${num((view.lostAll || 0) + (view.gotAll || 0))})` : "—"],
+    ["Waiting buffer", view.jbMs !== undefined ? num(view.jbMs) + " ms" : "—"],
+    ["Time to unpack one picture", view.decMs !== undefined ? num(view.decMs, 1) + " ms" : "—"],
+    ["Freezes", view.freezes !== undefined ? `${view.freezes} (${num(view.freezeS, 1)} s in all) · dropped pictures ${num(view.dropped)}` : "—"],
+    ["Delay, estimated", g ? `about ${num(g.total)} ms = ` + Object.entries(g.parts).map(([k, v]) => `${k} ${num(v)}`).join(" + ") : "—"],
+    ["Path", view.path || "—"],
+  ]);
+  // the pass marks
+  const mark = (id, ok, text) => setPill(id, ok === undefined ? "" : ok ? "ok" : "bad", ok === undefined ? "wait" : text);
+  const big = Math.max(view.w || 0, view.h || 0), small = Math.min(view.w || 0, view.h || 0);
+  mark("mkSize", view.w ? big >= 1280 && small >= 720 : undefined, view.w ? `${view.w}×${view.h}` : "");
+  mark("mkFps", typeof view.fps === "number" ? view.fps >= 24 : undefined, num(view.fps));
+  mark("mkLimit", cam.limit ? cam.limit === "none" : undefined, cam.limit === "none" ? "nothing" : cam.limit === "cpu" ? "processor" : cam.limit === "bandwidth" ? "network" : String(cam.limit));
+  mark("mkLoss", typeof view.lostPct === "number" ? view.lostPct < 1 : undefined, num(view.lostPct, 1) + " %");
+}
+
+/* ---- totals for the report ---- */
+function startSummary() { sum = { secs: 0, fps: 0, fpsMin: Infinity, kbps: 0, hiddenCount: 0 }; }
+function addToSummary() {
+  if (!sum || typeof mine.fps !== "number") return;
+  sum.secs++; sum.fps += mine.fps; sum.fpsMin = Math.min(sum.fpsMin, mine.fps); sum.kbps += mine.kbps || 0;
+}
+function reportText() {
+  const cam = role === "camera" ? mine : far, view = role === "viewer" ? mine : far;
+  const tbl = id => Array.from($(id).rows, r => `  ${r.cells[0].textContent}: ${r.cells[1].textContent}`).join("\n");
+  const marks = ["mkSize", "mkFps", "mkLimit", "mkLoss", "mkDelay"].map(id => `  [${$(id).classList.contains("ok") ? "PASS" : $(id).classList.contains("bad") ? "FAIL" : " ?? "}] ${$(id).parentElement.textContent.trim().replace(/\s+/g, " ")}`).join("\n");
+  const s = sum || {};
+  return [
+    `ROB2 VIDEO TEST  REV ${REV}  -  ${role ? role.toUpperCase() : "?"} side  -  ${new Date().toString().slice(0, 24)}`,
+    `Browser: ${navigator.userAgent}`,
+    role === "camera" ? `Choices: camera ${$("selCam").value}, size ${$("selSize").value}, limit ${$("selRate").value} kbit/s, format ${$("selCodec").value}` : "",
+    s.secs ? `This run: ${s.secs} s of video, average ${num(s.fps / s.secs, 1)} pictures a second (lowest ${num(s.fpsMin, 1)}), average ${num(s.kbps / s.secs)} kbit/s, page hidden ${s.hiddenCount} times` : "This run: no video yet",
+    "PASS MARKS", marks, "CAMERA SIDE", tbl("tblCam"), "VIEWER SIDE", tbl("tblView"), "LOG", logLines.join("\n"),
+  ].filter(Boolean).join("\n");
+}
+$("btnCopy").addEventListener("click", async () => {
+  const text = reportText();
+  try { await navigator.clipboard.writeText(text); $("copyMsg").textContent = "Copied. Paste it wherever you want."; }
+  catch (e) {                                              // older browsers: select the text so you can copy it by hand
+    $("log").textContent = text; const r = document.createRange(); r.selectNodeContents($("log"));
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    $("copyMsg").textContent = "Could not copy by itself: the report is selected below, copy it by hand.";
+  }
+});
+
+/* ===========================================================================================
+   PART J - START, STOP, AND KEEPING THE SCREEN ON
+   =========================================================================================== */
+function stopAll(why) {
+  if (!running && !client) return;
+  log("STOP: " + why);
+  if (role === "camera" && mqttUp) announceCamera("offline");
+  running = false;
+  dropPeer(why);
+  closeMqtt();
+  if (stream) { stream.getTracks().forEach(t => { t.onended = null; t.stop(); }); stream = null; track = null; $("camPreview").srcObject = null; }
+  keepScreenOn(false);
+  $("btnStartCam").disabled = false; $("btnStopCam").disabled = true; setPill("pillCam", "", "Camera: off"); setPill("pillViewer", "", "Viewer: nobody");
+  $("btnWatch").disabled = false; $("btnStopWatch").disabled = true; setPill("pillVideo", "", "Video: off"); setPill("pillCamera", "", "Camera: ?");
+  $("viewVideo").srcObject = null; $("btnFreeze").disabled = true;
+  mine = {}; far = {}; renderNumbers();
+}
+
+// Ask the device not to switch its screen off while the test runs.
+let wake = null;
+async function keepScreenOn(on) {
+  try {
+    if (on && "wakeLock" in navigator && !document.hidden) wake = await navigator.wakeLock.request("screen");
+    else if (!on && wake) { await wake.release(); wake = null; }
+  } catch (e) {}
+}
+// "Hidden" = another app or tab covers this page. On Android the camera then PAUSES. We write it
+// in the log, because this is exactly what the split-screen test has to find out.
+document.addEventListener("visibilitychange", () => {
+  if (!running) return;
+  log(document.hidden ? "PAGE HIDDEN (on a tablet the camera pauses now)" : "Page visible again");
+  if (document.hidden && sum) sum.hiddenCount++;
+  if (!document.hidden) keepScreenOn(true);
+});
+
+// The heartbeat of the page: once a second.
+setInterval(async () => { watchdog(); await readNumbers(); renderNumbers(); }, 1000);
+
+log(`Rob2 Video Test REV ${REV} ready. This page is "${SID}".`);
+if (!window.isSecureContext) say("bad", "This page must be opened with https:// (GitHub Pages does that).");
+else if (!window.RTCPeerConnection) say("bad", "This browser cannot do live video (no WebRTC). Use Chrome or Safari.");
+else if (typeof mqtt === "undefined") say("bad", "The file mqtt.min.js is missing next to this page.");
+</script>
+</body>
+</html>
