@@ -2,6 +2,29 @@
 <!--
   Rob2 Operator - universal browser controller for Rob2
   =====================================================
+  REV 0.7  (2026-10-08)  - LIVE VIDEO FROM THE ROBOT, on the same page as the controls
+      * New box at the top: the tablet's FRONT camera (tablet app "final1" REV 2.23 or newer,
+        switch "VIDEO TO PHONE" ON there). The video goes straight from the tablet to this page
+        (WebRTC); EMQX only carries 3 short set-up messages, on the connection this page already has.
+      * Works in both modes: WATCH ONLY (the pocket remote drives, this page watches) and
+        driving from this page with a game controller.
+      * Phone held UPRIGHT  = video on top, everything else below (scroll).
+        Phone turned SIDEWAYS = the video fills the screen, with a thin status strip and
+        STOP ALL on top of the picture. Turn it upright again to reach the settings.
+      * SAFETY: a big red "VIDEO FROZEN" appears when no new picture came for 1 second
+        (never drive by an old picture). The badge shows the delay: green < 0.3 s,
+        amber < 0.5 s, red above.
+      * STOP ALL is on the picture itself, always one tap away.
+      * "Show the robot's camera" switch under the video (remembered on this device).
+      * One viewer at a time: if another phone presses WATCH, this page says so and offers
+        to take the picture back with one tap.
+      * Nothing else changed: same driving, same safety, same messages to the robot.
+  REV 0.6  (2026-10-02)  - WATCH ONLY mode (for use with the pocket remote, or any other operator)
+      * Settings > "Watch only": the page connects and shows the robot (status, LED, CHAIN line)
+        but is NOT an operator: it never says "operator online", never sends motion commands,
+        and "Enable driving" is switched off.
+      * STOP ALL and Reset e-stop still work in Watch only, so the phone is an extra stop button.
+      * Shows whether an operator (the remote) is online.
   REV 0.5  (2026-10-02)  - "COMBINED" CONTROL STYLE (third choice in the Control style switch)
       * Direction from the LEFT stick OR the D-pad, whichever you push (the D-pad wins if both are used)
       * The stick reads 8 directions: pushing it to a corner gives the diagonal directly
@@ -180,6 +203,47 @@ button.big { font-size: 16px; padding: 12px 18px; }
 .steps span.now { background: var(--accent); color: var(--accent-ink); }
 .steps span.skip { background: var(--warn-bg); color: var(--warn); }
 @media (prefers-reduced-motion: reduce) { .k { transition: none; } }
+
+/* ---- REV 0.7: live video from the robot ---- */
+#videoBox { padding: 10px; }
+.vwrap { position: relative; background: #000; border-radius: 8px 8px 0 0; overflow: hidden;
+         width: 100%; aspect-ratio: 16 / 9; max-height: 62vh; margin: 0 auto; }
+#vid { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+.vbadge { position: absolute; top: 8px; left: 8px; font: 600 13px var(--mono); padding: 3px 8px; border-radius: 999px;
+          background: rgba(0,0,0,.6); color: #ddd; }
+.vbadge.ok { color: #6ad48a; } .vbadge.warn { color: #f0c060; } .vbadge.bad { background: #c62828; color: #fff; }
+.vstop { position: absolute; top: 6px; right: 6px; font: 700 14px var(--sans); padding: 8px 12px; border-radius: 10px;
+         background: #d32f2f; color: #fff; border: 2px solid #fff; }
+.vstop[disabled] { opacity: .45; }
+.vmsg { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 84%; text-align: center;
+        font: 600 15px var(--sans); color: #eee; background: rgba(0,0,0,.55); padding: 10px 14px; border-radius: 10px; border: 0; }
+button.vmsg { cursor: pointer; text-decoration: underline; }
+.vfrozen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+           background: rgba(198, 40, 40, .45); color: #fff; font: 800 24px var(--sans); text-align: center; letter-spacing: 1px;
+           pointer-events: none; padding: 0 12px; }
+.vfrozen small { font: 600 12px var(--sans); letter-spacing: 0; }
+.vfrozen[hidden], .vmsg[hidden] { display: none; }
+.vstrip { display: flex; gap: 8px; align-items: center; border-radius: 0 0 8px 8px;
+          padding: 5px 8px; background: #111; color: #eee; font: 12px var(--mono); }
+.vstrip span { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.vstrip button { white-space: nowrap;  font: 600 12px var(--sans); padding: 5px 9px; border-radius: 6px; background: #333; color: #fff; border: 1px solid #777; }
+.vbelow { margin-top: 8px; display: grid; gap: 6px; }
+/* A phone turned SIDEWAYS while the video is on: the picture fills the whole screen.
+   (a short screen in landscape = a phone; tablets and computers keep the normal page) */
+@media (orientation: landscape) and (max-height: 520px) {
+  body.vid-on { overflow: hidden; }
+  body.vid-on #videoBox { position: fixed; inset: 0; z-index: 50; margin: 0; padding: 0; border: 0; border-radius: 0; background: #000; }
+  body.vid-on #videoBox h2, body.vid-on #videoBox .vbelow { display: none; }
+  body.vid-on .vwrap { position: absolute; inset: 0; aspect-ratio: auto; max-height: none; border-radius: 0; }
+  body.vid-on .vbadge { top: calc(8px + env(safe-area-inset-top, 0px)); left: calc(8px + env(safe-area-inset-left, 0px)); }
+  body.vid-on .vstop { top: calc(8px + env(safe-area-inset-top, 0px)); right: calc(8px + env(safe-area-inset-right, 0px));
+                       font-size: 16px; padding: 12px 18px; }
+  body.vid-on .vstrip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body.vid-on .vfrozen { font-size: 30px; } body.vid-on .vfrozen small { font-size: 15px; }
+  body.vid-on .vstrip { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; border-radius: 0; background: rgba(0,0,0,.6);
+                        padding-left: calc(8px + env(safe-area-inset-left, 0px)); padding-right: calc(8px + env(safe-area-inset-right, 0px));
+                        padding-bottom: calc(5px + env(safe-area-inset-bottom, 0px)); }
+}
 /* phones: a smaller controller picture so it fits inside the panel */
 @media (max-width: 460px) {
   .dpad, .face { grid-template-columns: repeat(3, 34px); grid-template-rows: repeat(3, 30px); gap: 3px; }
@@ -195,11 +259,32 @@ button.big { font-size: 16px; padding: 12px 18px; }
 
 <header>
   <h1>Rob2 Operator</h1>
-  <span class="rev">REV 0.5 · Step 0 – 3</span>
+  <span class="rev">REV 0.7 · Step 0 – 3 + video</span>
   <span class="step">Motion commands are sent only while "Driving" is ON</span>
 </header>
 
 <main>
+
+  <!-- ===================== REV 0.7: LIVE VIDEO FROM THE ROBOT ===================== -->
+  <section id="videoBox" class="wide">
+    <h2>Robot camera</h2>
+    <div class="vwrap" id="vwrap">
+      <video id="vid" autoplay muted playsinline></video>
+      <div class="vbadge" id="vBadge">VIDEO OFF</div>
+      <div class="vfrozen" id="vFrozen" hidden>VIDEO FROZEN<small>no new picture for over 1 s — do not drive by this picture</small></div>
+      <button class="vmsg" id="vMsg" type="button" disabled>…</button>
+      <button class="vstop" id="vStop" type="button" disabled>STOP ALL</button>
+    </div>
+    <div class="vstrip"><span id="vStrip">not connected</span><button id="vReset" type="button" disabled>Reset e-stop</button></div>
+    <div class="vbelow">
+      <div class="row">
+        <label><input type="checkbox" id="vOn"> Show the robot's camera</label>
+        <span class="pill warn" id="pillVideo">Video: off</span>
+      </div>
+      <div class="mono small" id="vNums"></div>
+      <p class="small">The tablet app must have <b>VIDEO TO PHONE</b> switched ON. Turn the phone sideways for a full-screen picture.</p>
+    </div>
+  </section>
 
   <!-- ===================== STEP 0: DEVICE CHECK ===================== -->
   <section id="device">
@@ -214,6 +299,7 @@ button.big { font-size: 16px; padding: 12px 18px; }
     <div class="row" id="linkPills">
       <span class="pill warn" id="pillBroker">EMQX: not connected</span>
       <span class="pill warn" id="pillRobot">Robot: ?</span>
+      <span class="pill warn" id="pillOperator" hidden>Operator: ?</span>
     </div>
     <div id="linkMsg" hidden></div>
     <div id="otherOp" class="note warn" hidden>Another operator was already online when this page connected.
@@ -236,6 +322,7 @@ button.big { font-size: 16px; padding: 12px 18px; }
         <label for="fRobot">Robot id</label><input id="fRobot" type="text" autocapitalize="off" spellcheck="false">
         <label class="span2"><input id="fShow" type="checkbox"> show the password</label>
         <label class="span2"><input id="fRemember" type="checkbox" checked> remember these settings on this device</label>
+        <label class="span2"><input id="fWatch" type="checkbox"> <b>Watch only</b>: another operator (for example the pocket remote) is driving. This page only shows the robot; STOP ALL still works.</label>
         <div class="row span2">
           <button id="btnForgetSettings" type="button">Forget saved settings</button>
         </div>
@@ -836,7 +923,7 @@ requestAnimationFrame(frame);
    Same topics, same messages, same Last Will as robot_link.py / robot_operator.py.
    NO motion command is sent in this step.
    ======================================================================= */
-const DEFAULTS = { host: "kd6b8bb2.ala.us-east-1.emqxsl.com", port: 8084, path: "/mqtt", user: "", pass: "", robot: "bot1" };
+const DEFAULTS = { host: "kd6b8bb2.ala.us-east-1.emqxsl.com", port: 8084, path: "/mqtt", user: "", pass: "", robot: "bot1", watch: false };
 const SETTINGS_KEY = "rob2.settings.v1";
 
 function topics(robot) {                    // same as topics() in robot_link.py
@@ -851,6 +938,7 @@ const SID = Array.from(crypto.getRandomValues(new Uint8Array(4)), b => b.toStrin
 const link = {
   client: null, T: null, robot: null,
   connected: false, everConnected: false, announced: false,
+  watch: false, operatorStatus: "?",        // REV 0.6: watch only = not an operator
   robotStatus: "?", robotState: {}, stateRx: 0,
   pingId: 0, pingSent: new Map(), rtts: [],
 };
@@ -864,12 +952,14 @@ function loadSettings() {
 function fillForm(s) {
   $("fHost").value = s.host; $("fPort").value = s.port; $("fPath").value = s.path;
   $("fUser").value = s.user; $("fPass").value = s.pass; $("fRobot").value = s.robot;
+  $("fWatch").checked = !!s.watch;
 }
 function readForm() {
   return { host: $("fHost").value.trim().replace(/^[a-z]+:\/\//i, "").replace(/[:/].*$/, ""),
            port: parseInt($("fPort").value, 10) || DEFAULTS.port,
            path: "/" + $("fPath").value.trim().replace(/^\/+/, ""),
-           user: $("fUser").value.trim(), pass: $("fPass").value, robot: $("fRobot").value.trim() || DEFAULTS.robot };
+           user: $("fUser").value.trim(), pass: $("fPass").value, robot: $("fRobot").value.trim() || DEFAULTS.robot,
+           watch: $("fWatch").checked };
 }
 fillForm(loadSettings());
 $("fShow").addEventListener("change", e => { $("fPass").type = e.target.checked ? "text" : "password"; });
@@ -893,7 +983,11 @@ function connectLink(ev) {
   if ($("fRemember").checked) { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch (e) {} }
   if (link.client) { try { link.client.end(true); } catch (e) {} }
 
+  videoReset("a new connection");                 // REV 0.7
   link.T = topics(s.robot); link.robot = s.robot;
+  link.watch = !!s.watch; link.operatorStatus = "?";
+  $("pillOperator").hidden = !link.watch;
+  if (link.watch && drive.armed) setArmed(false, "Watch only was switched on");
   link.connected = false; link.everConnected = false; link.announced = false; link.refused = false;
   link.robotStatus = "?"; link.robotState = {}; link.stateRx = 0;
   link.pingSent.clear(); link.rtts = [];
@@ -905,29 +999,32 @@ function connectLink(ev) {
   say("warn", `Connecting to ${url} …`);
   setPill("pillBroker", "warn", "EMQX: connecting…");
 
-  const client = mqtt.connect(url, {
-    clientId: `op-web-${s.robot}-${SID}`,
+  const options = {
+    clientId: `${link.watch ? "watch" : "op"}-web-${s.robot}-${SID}`,
     username: s.user, password: s.pass,
     protocolVersion: 5, clean: true, keepalive: 10,
     reconnectPeriod: 2000, connectTimeout: 10000,
-    // If this page vanishes (tab closed, Wi-Fi lost), the broker publishes this for us:
-    will: { topic: link.T.op_status, payload: "offline", qos: 1, retain: true },
-  });
+  };
+  // An operator leaves a "Last Will": if this page vanishes (tab closed, Wi-Fi lost) the broker
+  // publishes "offline" for us. A watcher is not an operator, so it leaves no will.
+  if (!link.watch) options.will = { topic: link.T.op_status, payload: "offline", qos: 1, retain: true };
+  const client = mqtt.connect(url, options);
   link.client = client;
   $("btnDisconnect").disabled = false;
 
   client.on("connect", () => {
     if (client !== link.client) return;
     link.connected = true; link.everConnected = true; link.announced = false;
-    say("ok", "Connected to EMQX.");
+    say("ok", link.watch ? "Connected to EMQX — WATCH ONLY (this page is not driving)." : "Connected to EMQX.");
     setPill("pillBroker", "ok", "EMQX: connected");
     $("btnPing").disabled = false;
     $("settingsBox").open = false;
     client.subscribe({ [link.T.state]: { qos: 0 }, [link.T.status]: { qos: 1 },
                        [link.T.pong]: { qos: 0 }, [link.T.op_status]: { qos: 1 } });
+    videoOnConnect(client);                       // REV 0.7: the 2 video topics
     // Listen first (is another operator already online?), THEN say that we are online.
     setTimeout(() => {
-      if (client !== link.client || !link.connected) return;
+      if (client !== link.client || !link.connected || link.watch) return;   // a watcher never says "operator online"
       client.publish(link.T.op_status, "online", { qos: 1, retain: true });
       link.announced = true;
     }, 700);
@@ -936,6 +1033,7 @@ function connectLink(ev) {
   client.on("message", (topic, payload) => {
     if (client !== link.client) return;
     const text = payload.toString();
+    if (topic.includes("/video/")) { videoOnMessage(topic, text); return; }   // REV 0.7
     if (topic === link.T.pong) {
       try {
         const id = JSON.parse(text).id, t0 = link.pingSent.get(id);
@@ -946,7 +1044,12 @@ function connectLink(ev) {
     } else if (topic === link.T.status) {
       link.robotStatus = text;
     } else if (topic === link.T.op_status) {
-      if (!link.announced && text === "online") $("otherOp").hidden = false;   // someone else was here first
+      if (link.watch) {                       // watching: just show whether an operator is there
+        link.operatorStatus = text;
+        setPill("pillOperator", text === "online" ? "ok" : "warn", `Operator: ${text}`);
+      } else if (!link.announced && text === "online") {
+        $("otherOp").hidden = false;          // someone else was here first
+      }
     }
   });
 
@@ -981,10 +1084,12 @@ function disconnectLink() {
   const client = link.client;
   if (!client) return;
   if (drive.armed) setArmed(false, "you disconnected");
+  videoReset("you disconnected");                 // REV 0.7
   link.client = null; link.connected = false;
   const done = () => { try { client.end(); } catch (e) {} };
-  try { client.connected ? client.publish(link.T.op_status, "offline", { qos: 1, retain: true }, done) : done(); }
+  try { (client.connected && !link.watch) ? client.publish(link.T.op_status, "offline", { qos: 1, retain: true }, done) : done(); }
   catch (e) { done(); }
+  $("pillOperator").hidden = true;
   setPill("pillBroker", "warn", "EMQX: not connected");
   setPill("pillRobot", "warn", "Robot: ?");
   $("btnDisconnect").disabled = true; $("btnPing").disabled = true; $("settingsBox").open = true;
@@ -999,7 +1104,7 @@ $("btnDisconnect").addEventListener("click", disconnectLink);
 // Leaving the page: say "offline" ourselves (the Last Will is the backup).
 window.addEventListener("pagehide", () => {
   if (link.client && link.client.connected) {
-    try { link.client.publish(link.T.op_status, "offline", { qos: 1, retain: true }); link.client.end(); } catch (e) {}
+    try { if (!link.watch) link.client.publish(link.T.op_status, "offline", { qos: 1, retain: true }); link.client.end(); } catch (e) {}
   }
 });
 
@@ -1133,7 +1238,7 @@ setInterval(driveTick, 20);
 
 /* Driving ON / OFF */
 function setArmed(on, why) {
-  if (on && (!link.client || !link.connected)) return;
+  if (on && (!link.client || !link.connected || link.watch)) return;   // a watcher never drives
   const was = drive.armed;
   drive.armed = on;
   if (on) {
@@ -1163,8 +1268,9 @@ function estop(on, from) {                  // same as estop() in robot_operator
 
 function drawDrive(why) {
   const linked = !!(link.client && link.connected);
-  $("btnArm").disabled = !linked;
+  $("btnArm").disabled = !linked || link.watch;
   $("btnStopAll").disabled = $("btnReset").disabled = !linked;
+  drive.shownLinked = linked; drive.shownWatch = link.watch;
   $("btnArm").textContent = drive.armed ? "Disable driving" : "Enable driving";
   $("btnArm").classList.toggle("primary", !drive.armed);
   setPill("pillDrive", drive.armed ? "ok" : "warn", drive.armed ? "Driving: ON" : "Driving: OFF");
@@ -1173,6 +1279,7 @@ function drawDrive(why) {
   if (why) { text = `Driving switched OFF: ${why}. Zeros were sent.`; kind = "bad"; }
   else if (drive.estopNote) { text = drive.estopNote; kind = "bad"; }
   else if (!linked) text = "Connect to the robot first (section 2). Until driving is ON, this is only a preview.";
+  else if (link.watch) text = "WATCH ONLY: this page does not drive (another operator does). STOP ALL and Reset e-stop still work. To drive from here, untick “Watch only” in Settings and connect again.";
   else if (!drive.armed) text = "Driving is OFF: nothing is sent. Put Rob2 on a box for the first test, then tap “Enable driving”.";
   m.hidden = !text; m.textContent = text; m.className = "note " + kind;
 }
@@ -1195,11 +1302,16 @@ window.addEventListener("pagehide", () => { if (drive.armed && link.client && li
 /* The "sent" line and the LED check (4 times a second) */
 function renderDrive() {
   const linked = !!(link.client && link.connected);
-  if ($("btnArm").disabled === linked) drawDrive();           // link came up or went down
+  if (drive.shownLinked !== linked || drive.shownWatch !== link.watch) drawDrive();   // link or mode changed
   $("sentLine").textContent = drive.armed
     ? `SENDING  v=${fmt(drive.last.v)}  vy=${fmt(drive.last.vy)}  w=${fmt(drive.last.w)}   @ ${SEND_HZ} Hz   sent=${drive.sent}`
     : `not sending   (sent so far: ${drive.sent})`;
   const el = $("ledLine");
+  if (linked && link.watch) {                 // watching: just show what the ESP32 reports
+    const f = link.stateRx && performance.now() - link.stateRx < 1500;
+    el.textContent = `ESP32 LED reports: ${f ? String(link.robotState.led ?? "?") : "(no fresh report)"}`;
+    return;
+  }
   if (!drive.armed) { el.textContent = ""; return; }
   const want = LED_COLORS[classify(drive.last.v, drive.last.vy, drive.last.w)];
   const fresh = link.stateRx && performance.now() - link.stateRx < 1500;
@@ -1212,17 +1324,338 @@ function renderDrive() {
    "accepted" is the robot's own count of commands it used; it must keep going up while driving. */
 function renderEcho() {
   const el = $("echoLine");
-  if (!drive.armed) { el.textContent = ""; return; }
+  const watching = !!(link.client && link.connected && link.watch);
+  if (!drive.armed && !watching) { el.textContent = ""; return; }
   const s = link.robotState, fresh = link.stateRx && performance.now() - link.stateRx < 1500;
   if (!fresh) { el.textContent = "CHAIN  no fresh report from the robot (tablet app final1 open? EMQX + USB green?)"; return; }
   const num = (x) => (typeof x === "number" ? (x >= 0 ? "+" : "") + x.toFixed(2) : "?");
-  el.textContent = `CHAIN  sent ${drive.sent} → robot accepted ${s.ok ?? "?"} (stale ${s.stale ?? "?"}, old ${s.old ?? "?"})   `
+  el.textContent = (watching ? `WATCH  operator ${link.operatorStatus} → ` : `CHAIN  sent ${drive.sent} → `)
+    + `robot accepted ${s.ok ?? "?"} (stale ${s.stale ?? "?"}, old ${s.old ?? "?"})   `
     + `robot ${s.state ?? "?"} v=${num(s.v)} w=${num(s.w)}   latency ${s.latency_ms == null ? "-" : s.latency_ms + " ms"}   `
     + `via ${s.bridge ?? "?"} rev ${s.bridge_rev ?? "-"} → ESP32 fw ${s.fw ?? "?"}`;
 }
 setInterval(renderEcho, 250);
 setInterval(renderDrive, 250);
 drawDrive();
+</script>
+<script>
+"use strict";
+/* =======================================================================
+   REV 0.7 - LIVE VIDEO FROM THE ROBOT
+   The tablet app "final1" (REV 2.23+) sends its FRONT camera. This page is the VIEWER.
+   Exactly the same set-up messages as video-test.html (the proven test page):
+       robot/<id>/video/camera   tablet -> everyone, kept by EMQX: "ready"/"offline" + who is watching
+       robot/<id>/video/hello    this page -> tablet  ("I want to watch")
+       robot/<id>/video/offer    tablet -> this page
+       robot/<id>/video/answer   this page -> tablet
+   They use the SAME EMQX connection as the rest of the page (section 2), and they count in
+   the "10 messages a second" budget, like the driving commands.
+   The video itself goes straight from the tablet to this page (WebRTC), not through EMQX.
+   The video is ONE WAY: tablet -> this page. This page never sends a camera or a sound.
+   ======================================================================= */
+const VIDEO_KEY      = "rob2.opvideo.v1";       // "show the robot's camera" ON/OFF, remembered on this device
+const V_RTC          = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+const V_GATHER_MS    = 1500;     // wait at most this long for the list of our addresses
+const V_HELLO_GAP    = 3000;     // ask the tablet again after this long (doubles up to 15 s)
+const V_HELLO_MAX    = 15000;
+const V_FROZEN_MS    = 1000;     // no new picture for this long = "VIDEO FROZEN"
+const V_DELAY_WARN   = 0.30;     // seconds: amber above this
+const V_DELAY_BAD    = 0.50;     //          red above this
+
+const vEl = $("vid");
+const vid = {
+  on: (() => { try { return JSON.parse(localStorage.getItem(VIDEO_KEY) || "{}").on !== false; } catch (e) { return true; } })(),
+  T: null,                      // the video topic names
+  pc: null, dc: null,           // the direct link to the tablet, and its small "numbers" side channel
+  camState: "?", camSid: null,  // what the tablet says about its camera
+  attempt: 0, helloAt: -1e9, helloGap: V_HELLO_GAP, awaitingOffer: false,
+  helloSent: false,             // we asked for the picture since the page connected
+  takenOver: false,             // another phone is watching now
+  badSince: 0, firstFrame: false, lastFrameAt: 0,
+  mine: {}, far: {}, farAt: 0,  // our numbers, and the tablet's numbers (they come on the side channel)
+  prev: {}, prevAt: 0, lossRing: [], wake: null,
+};
+$("vOn").checked = vid.on;
+
+function videoTopics(robot) {
+  const base = `robot/${robot}/video`;
+  return { camera: `${base}/camera`, hello: `${base}/hello`, offer: `${base}/offer`, answer: `${base}/answer` };
+}
+
+/* ---- called by the EMQX part of the page (section 2) ---- */
+function videoOnConnect(client) {
+  vid.T = videoTopics(link.robot);
+  client.subscribe({ [vid.T.camera]: { qos: 1 }, [vid.T.offer]: { qos: 1 } });
+}
+function videoReset(why) {                       // new connection or Disconnect: start from zero
+  videoDrop(why);
+  vid.camState = "?"; vid.camSid = null; vid.helloSent = false; vid.takenOver = false;
+  vid.awaitingOffer = false; vid.helloAt = -1e9; vid.helloGap = V_HELLO_GAP;
+}
+function videoOnMessage(topic, text) {
+  if (!vid.T) return;
+  let m; try { m = JSON.parse(text); } catch (e) { return; }
+  if (!m || typeof m !== "object") return;
+  if (topic === vid.T.camera) videoCameraState(m);
+  else if (topic === vid.T.offer) videoOffer(m);
+}
+
+/* ---- one set-up message, inside the "10 messages a second" budget ---- */
+function videoSend(topic, obj, tries = 0) {
+  if (!link.client || !link.connected) return;
+  if (sentLastSecond() >= RATE_LIMIT - 1 && tries < 8) {      // the driving commands come first: wait a moment
+    setTimeout(() => videoSend(topic, obj, tries + 1), 130);
+    return;
+  }
+  noteSent();
+  link.client.publish(topic, JSON.stringify(obj), { qos: 1 });
+}
+
+/* ---- what the tablet says: camera ready / offline, and who is watching ---- */
+function videoCameraState(m) {
+  const wasSid = vid.camSid;
+  vid.camState = m.state === "ready" ? "ready" : "offline";
+  vid.camSid = m.cam || null;
+  if (vid.camState === "ready" && wasSid && vid.camSid !== wasSid && vid.pc) videoDrop("the tablet's camera was restarted");
+  if (vid.camState === "ready" && wasSid !== vid.camSid) { vid.helloAt = -1e9; vid.helloGap = V_HELLO_GAP; vid.awaitingOffer = false; }
+  // One viewer at a time: the tablet says who is watching. If it is ANOTHER device, we stay quiet
+  // (two phones would otherwise steal the picture from each other for ever).
+  if (vid.helloSent && vid.camState === "ready" && m.viewer) {
+    const other = m.viewer !== SID;
+    if (other && !vid.takenOver) { vid.takenOver = true; vid.awaitingOffer = false; videoDrop("another device is watching now"); }
+    else if (!other && vid.takenOver) vid.takenOver = false;
+  }
+}
+
+function videoHello() {
+  if (vid.awaitingOffer) vid.helloGap = Math.min(vid.helloGap * 2, V_HELLO_MAX);    // no answer last time: wait longer
+  vid.attempt++; vid.helloAt = performance.now(); vid.awaitingOffer = true; vid.helloSent = true; vid.firstFrame = false;
+  videoSend(vid.T.hello, { viewer: SID, n: vid.attempt });
+}
+
+function videoGathered(p) {                      // wait until our address list is complete (max 1.5 s)
+  if (p.iceGatheringState === "complete") return Promise.resolve();
+  return new Promise(resolve => {
+    const timer = setTimeout(done, V_GATHER_MS);
+    function done() { clearTimeout(timer); p.removeEventListener("icegatheringstatechange", check); resolve(); }
+    function check() { if (p.iceGatheringState === "complete") done(); }
+    p.addEventListener("icegatheringstatechange", check);
+  });
+}
+
+/* ---- the tablet's OFFER arrived: build our end of the link and send the ANSWER ---- */
+async function videoOffer(m) {
+  if (!vid.on || !link.connected) return;
+  if (m.to !== SID || m.n !== vid.attempt || vid.pc || vid.takenOver) return;   // for another device, old, or a copy
+  vid.awaitingOffer = false;
+  const p = new RTCPeerConnection(V_RTC); vid.pc = p; vid.badSince = performance.now();
+  p.ondatachannel = e => {
+    const ch = e.channel; vid.dc = ch;
+    ch.onmessage = ev => { try { vid.far = JSON.parse(ev.data); vid.farAt = performance.now(); } catch (err) {} };
+    ch.onclose = () => { if (vid.pc === p) videoDrop("the tablet closed the video link"); };
+  };
+  p.ontrack = e => {
+    // "show every picture as soon as it arrives": no safety buffer
+    try { e.receiver.jitterBufferTarget = 0; } catch (err) {}
+    try { e.receiver.playoutDelayHint = 0; } catch (err) {}
+    vEl.srcObject = e.streams[0] || new MediaStream([e.track]);
+    vEl.play().catch(() => {});
+  };
+  p.onconnectionstatechange = () => { if (vid.pc === p && p.connectionState === "connected") vid.helloGap = V_HELLO_GAP; };
+  try {
+    await p.setRemoteDescription({ type: "offer", sdp: m.sdp });
+    await p.setLocalDescription(await p.createAnswer());
+    await videoGathered(p);
+    if (vid.pc !== p) return;
+    videoSend(vid.T.answer, { from: SID, n: m.n, sdp: p.localDescription.sdp });
+  } catch (e) { if (vid.pc === p) videoDrop("could not answer: " + e.message); }
+}
+
+/* ---- close the direct link (EMQX stays connected) ---- */
+function videoDrop(why) {
+  const p = vid.pc; if (!p) return;
+  vid.pc = null; vid.dc = null; vid.badSince = 0; vid.firstFrame = false;
+  vid.mine = {}; vid.far = {}; vid.prev = {}; vid.prevAt = 0; vid.lossRing = [];
+  try { p.close(); } catch (e) {}
+  vEl.srcObject = null;
+  vid.lastWhy = why;
+  vid.helloAt = performance.now() - vid.helloGap + 1000;      // ask again in about 1 second (if still wanted)
+}
+
+/* ---- is a new picture on the screen? (for "VIDEO FROZEN") ---- */
+let frameGen = 0;
+function watchFrames() {
+  if (!vEl.requestVideoFrameCallback) return;
+  const g = ++frameGen;
+  const cb = () => { if (g !== frameGen) return; vid.lastFrameAt = performance.now(); vEl.requestVideoFrameCallback(cb); };
+  vEl.requestVideoFrameCallback(cb);
+}
+vEl.addEventListener("playing", () => {
+  if (!vid.pc) return;
+  vid.firstFrame = true; vid.lastFrameAt = performance.now();
+  watchFrames();
+  // The first picture arrived and the video box is scrolled out of sight (you were in Settings):
+  // bring it into view once.
+  const r = $("videoBox").getBoundingClientRect();
+  if (r.bottom < 60 || r.top > innerHeight - 60) $("videoBox").scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+/* ---- the switch under the video ---- */
+$("vOn").addEventListener("change", e => {
+  vid.on = e.target.checked;
+  try { localStorage.setItem(VIDEO_KEY, JSON.stringify({ on: vid.on })); } catch (err) {}
+  if (!vid.on) videoDrop("video switched off");
+  else { vid.helloAt = -1e9; vid.helloGap = V_HELLO_GAP; vid.awaitingOffer = false; }
+});
+$("vMsg").addEventListener("click", () => {      // "take the picture back" from another device
+  if (!vid.takenOver) return;
+  vid.takenOver = false; vid.helloAt = -1e9; vid.helloGap = V_HELLO_GAP; vid.awaitingOffer = false;
+});
+$("vStop").addEventListener("click", () => estop(true, "STOP ALL on the video"));
+$("vReset").addEventListener("click", () => estop(false, "button on the video"));
+window.addEventListener("pagehide", () => videoDrop("page closed"));
+
+/* ---- once a second: is the link healthy? ask for the picture? read the numbers ---- */
+function videoTick() {
+  const t = performance.now();
+  const p = vid.pc;
+  if (p) {
+    const st = p.connectionState;
+    if (st === "connected") vid.badSince = 0;
+    else if (st === "failed" || st === "closed") videoDrop("the video link failed");
+    else if (st === "disconnected") { if (!vid.badSince) vid.badSince = t; else if (t - vid.badSince > 5000) videoDrop("no video for 5 seconds"); }
+    else { if (!vid.badSince) vid.badSince = t; else if (t - vid.badSince > 15000) videoDrop("the tablet could not be reached in 15 seconds"); }
+  }
+  if (!vid.pc && vid.on && link.client && link.connected && vid.T && !vid.takenOver && vid.camState === "ready"
+      && t - vid.helloAt >= vid.helloGap) videoHello();
+  videoNumbers();
+  videoKeepScreenOn();
+}
+setInterval(videoTick, 1000);
+
+function vDelta(key, value) {
+  const d = (typeof value === "number" && typeof vid.prev[key] === "number") ? value - vid.prev[key] : undefined;
+  if (typeof value === "number") vid.prev[key] = value;
+  return d;
+}
+function vPath(local, remote) {
+  if (!local) return undefined;
+  const a = local.candidateType, b = remote && remote.candidateType;
+  if (a === "relay" || b === "relay") return "through a relay server";
+  if (a === "srflx" || b === "srflx") return "direct, through the internet";
+  return "direct, same network";
+}
+async function videoNumbers() {
+  const p = vid.pc;
+  if (!p || p.connectionState !== "connected") { vid.mine = {}; return; }
+  let rep; try { rep = await p.getStats(); } catch (e) { return; }
+  if (vid.pc !== p) return;
+  const t = performance.now(), dt = vid.prevAt ? (t - vid.prevAt) / 1000 : 1; vid.prevAt = t;
+  let inb, pair, pairId; const byId = {};
+  rep.forEach(s => {
+    byId[s.id] = s;
+    if (s.type === "inbound-rtp" && (s.kind || s.mediaType) === "video") inb = s;
+    else if (s.type === "transport" && s.selectedCandidatePairId) pairId = s.selectedCandidatePairId;
+    else if (s.type === "candidate-pair" && s.nominated && s.state === "succeeded" && !pair) pair = s;
+  });
+  if (pairId && byId[pairId]) pair = byId[pairId];
+  if (!inb) return;
+  const frames = vDelta("dec", inb.framesDecoded), decT = vDelta("decT", inb.totalDecodeTime), bytes = vDelta("bytes", inb.bytesReceived);
+  const jb = vDelta("jb", inb.jitterBufferDelay), jbN = vDelta("jbN", inb.jitterBufferEmittedCount);
+  const lost = vDelta("lost", inb.packetsLost) || 0, got = vDelta("got", inb.packetsReceived) || 0;
+  vid.lossRing.push([lost, got]); if (vid.lossRing.length > 10) vid.lossRing.shift();
+  const L = vid.lossRing.reduce((a, x) => a + x[0], 0), G = vid.lossRing.reduce((a, x) => a + x[1], 0);
+  if (!vEl.requestVideoFrameCallback && frames > 0) vid.lastFrameAt = t;    // old browsers: count decoded pictures instead
+  const codec = byId[inb.codecId] ? byId[inb.codecId].mimeType.split("/")[1] : undefined;
+  vid.mine = {
+    w: inb.frameWidth || vEl.videoWidth, h: inb.frameHeight || vEl.videoHeight,
+    fps: typeof inb.framesPerSecond === "number" ? inb.framesPerSecond : (frames !== undefined ? frames / dt : undefined),
+    kbps: bytes !== undefined ? bytes * 8 / dt / 1000 : undefined, codec,
+    lostPct: L + G > 0 ? Math.max(0, L) / (L + G) * 100 : undefined, lostAll: inb.packetsLost, gotAll: inb.packetsReceived,
+    jbMs: jbN > 0 && jb !== undefined ? jb / jbN * 1000 : undefined,
+    decMs: frames > 0 && decT !== undefined ? decT / frames * 1000 : undefined,
+    freezes: inb.freezeCount, freezeS: inb.totalFreezesDuration, dropped: inb.framesDropped,
+    rttMs: pair && typeof pair.currentRoundTripTime === "number" ? pair.currentRoundTripTime * 1000 : undefined,
+    path: pair ? vPath(byId[pair.localCandidateId], byId[pair.remoteCandidateId]) : undefined,
+  };
+  // our numbers go back to the tablet (its VIDEO card shows "Phone receives: …")
+  if (vid.dc && vid.dc.readyState === "open") { try { vid.dc.send(JSON.stringify(vid.mine)); } catch (e) {} }
+}
+/* The delay, ESTIMATED from the counters: pack + travel + wait + unpack + camera and screen (~60 ms) */
+function videoDelay() {
+  const m = vid.mine, f = performance.now() - vid.farAt < 3500 ? vid.far : {};
+  if (typeof m.jbMs !== "number") return undefined;
+  return ((f.encMs || 0) + (m.rttMs || 0) / 2 + m.jbMs + (m.decMs || 0) + 60) / 1000;
+}
+
+/* Keep the phone's screen on while the picture is live */
+function videoKeepScreenOn() {
+  const want = !!(vid.pc && vid.firstFrame && !document.hidden);
+  if (want && !vid.wake && "wakeLock" in navigator && !vid.wakeAsking) {
+    vid.wakeAsking = true;
+    navigator.wakeLock.request("screen").then(w => { vid.wake = w; }).catch(() => {}).finally(() => { vid.wakeAsking = false; });
+  } else if (!want && vid.wake) { try { vid.wake.release(); } catch (e) {} vid.wake = null; }
+}
+
+/* ---- draw the video box (4 times a second) ---- */
+const n0 = x => (typeof x === "number" && isFinite(x)) ? x.toFixed(0) : "–";
+function renderVideo() {
+  const linked = !!(link.client && link.connected);
+  document.body.classList.toggle("vid-on", vid.on);
+  const t = performance.now();
+  const live = !!(vid.pc && vid.pc.connectionState === "connected" && vid.firstFrame);
+  const frozen = live && !document.hidden && t - vid.lastFrameAt > V_FROZEN_MS;
+  const d = live ? videoDelay() : undefined;
+
+  // the badge (top left)
+  const badge = $("vBadge");
+  if (!vid.on) { badge.className = "vbadge"; badge.textContent = "VIDEO OFF"; }
+  else if (frozen) { badge.className = "vbadge bad"; badge.textContent = `● FROZEN ${((t - vid.lastFrameAt) / 1000).toFixed(1)} s`; }
+  else if (live) {
+    badge.className = "vbadge " + (d === undefined || d < V_DELAY_WARN ? "ok" : d < V_DELAY_BAD ? "warn" : "bad");
+    badge.textContent = `● LIVE ${n0(vid.mine.fps)} fps · ${d === undefined ? "–" : d.toFixed(2) + " s"}`;
+  } else if (vid.takenOver) { badge.className = "vbadge warn"; badge.textContent = "● another device is watching"; }
+  else { badge.className = "vbadge warn"; badge.textContent = linked ? "● connecting…" : "● no link"; }
+  $("vFrozen").hidden = !frozen;
+
+  // the message in the middle (only when there is no live picture)
+  const msg = $("vMsg");
+  let text = "", tap = false;
+  if (!vid.on) text = "Video is OFF. Tick “Show the robot's camera” (hold the phone upright).";
+  else if (!linked) text = "Connect to EMQX first: section 2 (hold the phone upright).";
+  else if (vid.takenOver) { text = "Another device is watching the robot's camera. Tap here to take the picture back."; tap = true; }
+  else if (vid.camState === "offline") text = "The tablet's camera is off: switch VIDEO TO PHONE ON in the tablet app.";
+  else if (vid.camState !== "ready") text = "Waiting for the tablet… (tablet app final1 REV 2.23, VIDEO TO PHONE ON)";
+  else if (!live) text = "Connecting to the robot's camera…";
+  msg.hidden = !text; msg.textContent = text; msg.disabled = !tap;
+
+  // STOP ALL / Reset on the picture
+  $("vStop").disabled = !linked; $("vReset").disabled = !linked;
+
+  // the status strip (bottom): robot + who drives
+  const s = link.robotState || {}, fresh = link.stateRx && t - link.stateRx < 1500;
+  let strip;
+  if (!linked) strip = "not connected to EMQX";
+  else {
+    strip = fresh ? `${s.state ?? "?"} · LED ${s.led ?? "?"} · lat ${s.latency_ms ?? "-"} ms · wd ${s.watchdog_trips ?? "?"}`
+                  : "robot: no fresh report";
+    if (link.watch) strip += ` · operator ${link.operatorStatus}`;
+    else strip += drive.armed ? ` · YOU: ${$("motion").textContent} ${$("lvl").textContent.split("·").pop().trim()}` : " · driving OFF";
+    if (drive.estopNote && drive.estopNote.startsWith("E-STOP")) strip = "E-STOP SENT · " + strip;
+  }
+  $("vStrip").textContent = strip;
+
+  // the numbers under the video, and the pill
+  const m = vid.mine;
+  $("vNums").textContent = live
+    ? `${m.w || "?"}×${m.h || "?"} · ${n0(m.fps)} fps · ${n0(m.kbps)} kbit/s · lost ${typeof m.lostPct === "number" ? m.lostPct.toFixed(1) : "–"} % · `
+      + `buffer ${n0(m.jbMs)} ms · freezes ${m.freezes ?? "–"} · ${m.codec || "?"} · ${m.path || "?"}`
+    : (vid.lastWhy && vid.on && linked ? `last change: ${vid.lastWhy}` : "");
+  setPill("pillVideo", !vid.on ? "warn" : frozen ? "bad" : live ? "ok" : "warn",
+          !vid.on ? "Video: off" : frozen ? "Video: FROZEN" : live ? "Video: live" : "Video: waiting");
+}
+setInterval(renderVideo, 250);
+renderVideo();
 </script>
 </body>
 </html>
