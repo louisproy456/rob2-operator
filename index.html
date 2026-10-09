@@ -2,6 +2,18 @@
 <!--
   Rob2 Operator - universal browser controller for Rob2
   =====================================================
+  REV 1.1  (2026-10-09)  - UPRIGHT ONLY (no sideways operation)
+      * Upright is the only way to see the VIDEO and the JOYSTICK at the same time, so:
+        phone turned sideways = a black screen "Turn the phone upright". The joystick is released
+        and, if you were driving, driving is switched OFF (3 STOPs + operator offline), exactly
+        like STOP DRIVING. Turn the phone upright and tap START DRIVING again.
+      * The full-screen sideways video is gone. Upright is unchanged (REV 0.12).
+      * Tip: the phone's own rotation lock stops the screen turning at all
+        (iPhone: Control Centre > Portrait Orientation Lock).
+  REV 0.12 (2026-10-09)  - the page's REV number is shown on the video, top right
+      * small badge "REV 0.12" on the same line as "● LIVE 30 fps · 0.09 s", so you always know
+        which version the phone is running (simple and expert screen, upright and sideways).
+      * Nothing else changed.
   REV 0.11 (2026-10-09)  - SIMPLE SCREEN + EXPERT SCREEN (passcode), PHONE ONLY DRIVER
       * SIMPLE SCREEN (what you see when the page opens): the video on top, 4 LEDs
             N = network (EMQX)   V = video   R = the robot's own LED colour   D = driving
@@ -234,6 +246,11 @@ button.vmsg { cursor: default; } button.vmsg[disabled] { opacity: 1; } button.vm
 .vstrip span { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .vstrip button { white-space: nowrap;  font: 600 12px var(--sans); padding: 5px 9px; border-radius: 6px; background: #333; color: #fff; border: 1px solid #777; }
 .vbelow { margin-top: 8px; display: grid; gap: 6px; }
+/* ---- REV 0.12: the page's REV number, top right of the video ---- */
+.vrev { position: absolute; top: 8px; right: 8px; font: 600 12px var(--mono); padding: 3px 8px; border-radius: 999px;
+        background: rgba(0,0,0,.6); color: #ccc; pointer-events: none; }
+body:not(.tpad-on) .vrev { top: auto; bottom: 8px; }     /* STOP ALL sits top right on the picture: move the REV down */
+
 /* ---- REV 0.11: SIMPLE SCREEN (default) and EXPERT SCREEN ---- */
 /* simple: only the video, the 4 LEDs, START DRIVING, the joystick (while driving), STOP ALL / Reset */
 body.simple header, body.simple #device, body.simple #link, body.simple #videoBox > h2,
@@ -293,38 +310,27 @@ header #btnSimple { margin-left: auto; }
 /* the touch panel has its own big STOP ALL, so the small one on the video is not needed upright */
 body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
 
-/* A phone turned SIDEWAYS while the video is on: the picture fills the whole screen.
-   (a short screen in landscape = a phone; tablets and computers keep the normal page) */
+/* REV 1.1: UPRIGHT ONLY - the only way to see the VIDEO and the JOYSTICK at the same time.
+   A phone turned sideways shows only "turn the phone upright" (the joystick is released and
+   driving is switched OFF). Tablets and computers (taller screens) are not affected. */
+.turnback { display: none; }
 @media (orientation: landscape) and (max-height: 520px) {
-  #tpad { display: none; }                       /* REV 0.8: touch driving is for the phone held UPRIGHT */
-  body.vid-on .vstop, body.vid-on .vstrip button { display: block; }   /* full-screen video: STOP ALL + Reset back on the picture */
-  body.vid-on { overflow: hidden; }
-  body.vid-on #videoBox { position: fixed; inset: 0; z-index: 50; margin: 0; padding: 0; border: 0; border-radius: 0; background: #000; }
-  body.vid-on #videoBox h2, body.vid-on #videoBox .vbelow { display: none; }
-  body.vid-on .vwrap { position: absolute; inset: 0; aspect-ratio: auto; max-height: none; border-radius: 0; }
-  body.vid-on .vbadge { top: calc(8px + env(safe-area-inset-top, 0px)); left: calc(8px + env(safe-area-inset-left, 0px)); }
-  body.vid-on .vstop { top: calc(8px + env(safe-area-inset-top, 0px)); right: calc(8px + env(safe-area-inset-right, 0px));
-                       font-size: 16px; padding: 12px 18px; }
-  body.vid-on .vstrip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  body.vid-on .leds { position: absolute; top: calc(8px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%);
-                      z-index: 4; margin: 0; gap: 14px; background: rgba(0,0,0,.55); padding: 4px 10px; border-radius: 12px; }
-  body.vid-on .led { color: #ddd; font-size: 11px; } body.vid-on .led i { width: 14px; height: 14px; }
-  body.simple.vid-on .vstrip { display: none !important; }
-  body.simple.vid-on #btnGear { display: none; }
-  body.vid-on .vled { position: absolute; left: 0; right: 0; top: 0; height: 6px; margin: 0; border: 0; border-radius: 0;
-                      z-index: 3; font-size: 0; }   /* sideways: a thin colour line along the top edge */
-  body.vid-on .vfrozen { font-size: 30px; } body.vid-on .vfrozen small { font-size: 15px; }
-  body.vid-on .vstrip { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; border-radius: 0; background: rgba(0,0,0,.6);
-                        padding-left: calc(8px + env(safe-area-inset-left, 0px)); padding-right: calc(8px + env(safe-area-inset-right, 0px));
-                        padding-bottom: calc(5px + env(safe-area-inset-bottom, 0px)); }
+  .turnback { display: flex; position: fixed; inset: 0; z-index: 200; background: #000; color: #fff;
+              flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center;
+              font: 700 22px var(--sans); padding: 20px; }
+  .turnback span { font-size: 54px; }
+  .turnback small { font: 500 14px var(--sans); color: #bbb; max-width: 520px; }
+  body { overflow: hidden; }
 }
 </style>
 </head>
 <body class="simple">
+<!-- REV 1.1: covers everything when the phone is sideways -->
+<div class="turnback" id="turnBack" aria-live="polite"><span>📱</span>Turn the phone upright<small>Rob2 is driven with the phone upright only (video + joystick together). If you were driving, driving was switched OFF.</small></div>
 
 <header>
   <h1>Rob2 Operator</h1>
-  <span class="rev">REV 0.11 · expert screen</span>
+  <span class="rev">REV 1.1 · expert screen</span>
   <button id="btnSimple" type="button">◀ Simple screen</button>
   <span class="step">Motion commands are sent only while "Driving" is ON</span>
 </header>
@@ -337,6 +343,7 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
     <div class="vwrap" id="vwrap">
       <video id="vid" autoplay muted playsinline></video>
       <div class="vbadge" id="vBadge">VIDEO OFF</div>
+      <div class="vrev" id="vRev">REV 1.1</div>
       <div class="vfrozen" id="vFrozen" hidden>VIDEO FROZEN<small>no new picture for over 1 s — do not drive by this picture</small></div>
       <button class="vmsg" id="vMsg" type="button" disabled>…</button>
       <button class="vstop" id="vStop" type="button" disabled>STOP ALL</button>
@@ -388,7 +395,7 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
         <span class="pill warn" id="pillVideo">Video: off</span>
       </div>
       <div class="mono small" id="vNums"></div>
-      <p class="small">The tablet app must have <b>VIDEO TO PHONE</b> switched ON. Turn the phone sideways for a full-screen picture.</p>
+      <p class="small">The tablet app must have <b>VIDEO TO PHONE</b> switched ON. Upright only: sideways shows "turn the phone upright".</p>
     </div>
   </section>
 
@@ -1348,11 +1355,24 @@ function touchReleaseAll() {
 }
 document.addEventListener("visibilitychange", () => { if (document.hidden) touchReleaseAll(); });
 window.addEventListener("blur", touchReleaseAll);
-window.addEventListener("resize", touchReleaseAll);               // phone turned: the controls move or hide
+window.addEventListener("resize", touchReleaseAll);               // phone turned: let go of everything
+/* REV 1.1: sideways = no driving. Same as tapping STOP DRIVING (3 STOPs, then "operator offline"). */
+const sidewaysQuery = window.matchMedia("(orientation: landscape) and (max-height: 520px)");
+function checkSideways() {
+  if (!sidewaysQuery.matches) return;
+  touchReleaseAll();
+  if (drive.armed) setArmed(false, "the phone was turned sideways");
+}
+if (sidewaysQuery.addEventListener) sidewaysQuery.addEventListener("change", checkSideways);
+else if (sidewaysQuery.addListener) sidewaysQuery.addListener(checkSideways);     // older Safari
+window.addEventListener("resize", checkSideways);
 window.addEventListener("orientationchange", touchReleaseAll);
 
 /* ---- the buttons ---- */
-$("tArm").addEventListener("click", () => { drive.estopNote = ""; setArmed(!drive.armed); });
+$("tArm").addEventListener("click", () => {
+  if (!drive.armed && sidewaysQuery.matches) return;               // REV 1.1: upright only
+  drive.estopNote = ""; setArmed(!drive.armed);
+});
 $("tStop").addEventListener("click", () => estop(true, "touch STOP ALL"));
 $("tReset").addEventListener("click", () => estop(false, "touch Reset"));
 [...$("tSpeed").children].forEach((b, i) => b.addEventListener("click", () => { speedI = i; }));
