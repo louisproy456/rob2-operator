@@ -2,6 +2,17 @@
 <!--
   Rob2 Operator - universal browser controller for Rob2
   =====================================================
+  REV 0.10 (2026-10-08)  - THE ROBOT'S LED COLOUR under the video
+      * A long thin colour bar right under the video shows the colour the robot's ESP32 LED
+        REPORTS, with the same 11 colours as the tablet app "final1" and the ESP32 firmware:
+          WHITE = STOP          GREEN = FORWARD        ORANGE = BACKWARD
+          BLUE = STRAFE LEFT    CYAN = STRAFE RIGHT    MAGENTA = ROTATE LEFT
+          YELLOW = ROTATE RIGHT LIME = DIAG FWD-LEFT   PINK = DIAG FWD-RIGHT
+          PURPLE = DIAG BACK-LEFT                      TEAL = DIAG BACK-RIGHT
+        and the safety colours: RED = E-STOP, fast blinking RED = WATCHDOG STOP,
+        RED/WHITE = re-arm (let go once), blinking BLUE = no link, blinking WHITE = waiting.
+      * Phone sideways: the colour is a thin line along the top of the screen.
+      * Nothing else changed.
   REV 0.9  (2026-10-08)  - SIMPLER: TOUCH JOYSTICK ONLY
       * The game controller is gone (old sections 3 "Controller" and 4 "Drive", the Learn
         wizard, the control styles and the motion table). Driving from this page is done with
@@ -194,7 +205,7 @@ button.big { font-size: 16px; padding: 12px 18px; }
 .vstop[disabled] { opacity: .45; }
 .vmsg { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 84%; text-align: center;
         font: 600 15px var(--sans); color: #eee; background: rgba(0,0,0,.55); padding: 10px 14px; border-radius: 10px; border: 0; }
-button.vmsg { cursor: default; } button.vmsg:not([disabled]) { cursor: pointer; text-decoration: underline; }
+button.vmsg { cursor: default; } button.vmsg[disabled] { opacity: 1; } button.vmsg:not([disabled]) { cursor: pointer; text-decoration: underline; }
 .vfrozen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
            background: rgba(198, 40, 40, .45); color: #fff; font: 800 24px var(--sans); text-align: center; letter-spacing: 1px;
            pointer-events: none; padding: 0 12px; }
@@ -205,6 +216,15 @@ button.vmsg { cursor: default; } button.vmsg:not([disabled]) { cursor: pointer; 
 .vstrip span { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .vstrip button { white-space: nowrap;  font: 600 12px var(--sans); padding: 5px 9px; border-radius: 6px; background: #333; color: #fff; border: 1px solid #777; }
 .vbelow { margin-top: 8px; display: grid; gap: 6px; }
+/* ---- REV 0.10: the robot's LED colour (a long thin bar under the video) ---- */
+.vled { height: 26px; margin-top: 4px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
+        font: 700 12px var(--mono); letter-spacing: .5px; background: #303030; color: #ddd; border: 1px solid var(--line);
+        transition: background-color .15s; }
+.vled.blink-fast { animation: vledBlink .3s steps(1) infinite; }
+.vled.blink-slow { animation: vledBlink 1s steps(1) infinite; }
+@keyframes vledBlink { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .vled.blink-fast, .vled.blink-slow { animation: none; } }
+
 /* ---- REV 0.8: touch driving (portrait) ---- */
 #tpad { margin-top: 10px; }
 .trow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
@@ -241,6 +261,8 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
   body.vid-on .vstop { top: calc(8px + env(safe-area-inset-top, 0px)); right: calc(8px + env(safe-area-inset-right, 0px));
                        font-size: 16px; padding: 12px 18px; }
   body.vid-on .vstrip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body.vid-on .vled { position: absolute; left: 0; right: 0; top: 0; height: 6px; margin: 0; border: 0; border-radius: 0;
+                      z-index: 3; font-size: 0; }   /* sideways: a thin colour line along the top edge */
   body.vid-on .vfrozen { font-size: 30px; } body.vid-on .vfrozen small { font-size: 15px; }
   body.vid-on .vstrip { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; border-radius: 0; background: rgba(0,0,0,.6);
                         padding-left: calc(8px + env(safe-area-inset-left, 0px)); padding-right: calc(8px + env(safe-area-inset-right, 0px));
@@ -252,7 +274,7 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
 
 <header>
   <h1>Rob2 Operator</h1>
-  <span class="rev">REV 0.9 · video + touch joystick</span>
+  <span class="rev">REV 0.10 · video + touch joystick + LED colour</span>
   <span class="step">Motion commands are sent only while "Driving" is ON</span>
 </header>
 
@@ -269,6 +291,7 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
       <button class="vstop" id="vStop" type="button" disabled>STOP ALL</button>
     </div>
     <div class="vstrip"><span id="vStrip">not connected</span><button id="vReset" type="button" disabled>Reset e-stop</button></div>
+    <div class="vled" id="vLed" title="the colour the robot's LED shows">ROBOT LED: ?</div>
 
     <!-- REV 0.8: TOUCH DRIVING (phone upright) -->
     <div id="tpad">
@@ -1135,6 +1158,50 @@ function renderVideo() {
 }
 setInterval(renderVideo, 250);
 renderVideo();
+
+/* =======================================================================
+   REV 0.10 - THE ROBOT'S LED COLOUR
+   The ESP32 reports the colour of its LED ("led" in the robot state, 2 times a second,
+   through the tablet). The SAME colour codes as the tablet app (RobotCmd) and the ESP32
+   firmware (LED_WORD), so the page, the tablet and the robot always show the same colour.
+   ======================================================================= */
+const LED_HEX = {                     // word -> colour (identical to final1 and the ESP32 firmware)
+  WHITE: "#E0E0E0", GREEN: "#00C853", ORANGE: "#FF6D00", BLUE: "#2962FF", CYAN: "#00B8D4",
+  MAGENTA: "#D500F9", YELLOW: "#FFD600", LIME: "#AEEA00", PINK: "#FF80AB", PURPLE: "#8000FF",
+  TEAL: "#1DE9B6", RED: "#D50000", GREY: "#9E9E9E",
+};
+const LED_MEANS = {                   // the 11 rows of the truth table
+  WHITE: "STOP", GREEN: "FORWARD", ORANGE: "BACKWARD", BLUE: "STRAFE LEFT", CYAN: "STRAFE RIGHT",
+  MAGENTA: "ROTATE LEFT", YELLOW: "ROTATE RIGHT", LIME: "DIAG FWD-LEFT", PINK: "DIAG FWD-RIGHT",
+  PURPLE: "DIAG BACK-LEFT", TEAL: "DIAG BACK-RIGHT",
+};
+function inkFor(hex) {                // black or white letters, whichever is easier to read
+  const v = parseInt(hex.slice(1), 16), r = v >> 16, g = (v >> 8) & 255, b = v & 255;
+  return (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? "#111" : "#fff";
+}
+function renderLed() {
+  const el = $("vLed");
+  const fresh = link.client && link.connected && link.stateRx && performance.now() - link.stateRx < 1500;
+  const word = fresh ? String(link.robotState.led ?? "") : "";
+  let bg = "#303030", text = "ROBOT LED: no report from the robot", blink = "";
+  if (word) {
+    const first = word.split(/[ /(]/)[0];
+    if (word === "RED")                      { bg = LED_HEX.RED;   text = "RED = E-STOP (press Reset e-stop)"; }
+    else if (word.startsWith("RED (fast"))   { bg = LED_HEX.RED;   text = "RED blinking = WATCHDOG STOP (commands stopped coming)"; blink = "blink-fast"; }
+    else if (word.startsWith("RED/WHITE"))   { bg = `linear-gradient(90deg, ${LED_HEX.RED} 50%, ${LED_HEX.WHITE} 50%)`; text = "RED/WHITE = let go once (send STOP) to re-arm"; }
+    else if (word.startsWith("BLUE (blink")) { bg = LED_HEX.BLUE;  text = "BLUE blinking = NO LINK (tablet ↔ robot)"; blink = "blink-slow"; }
+    else if (word.startsWith("WHITE (blink")){ bg = LED_HEX.WHITE; text = "WHITE blinking = WAITING for an operator"; blink = "blink-slow"; }
+    else if (first === "GREY")               { bg = LED_HEX.GREY;  text = "GREY = wheel test (assembly mode)"; }
+    else if (LED_HEX[first])                 { bg = LED_HEX[first]; text = `${first} = ${LED_MEANS[first] || ""}`; }
+    else text = `ROBOT LED: ${word}`;
+  }
+  el.style.background = bg;
+  el.style.color = bg.startsWith("#") ? inkFor(bg) : "#111";
+  el.className = "vled" + (blink ? " " + blink : "");
+  el.textContent = text;
+}
+setInterval(renderLed, 200);
+renderLed();
 </script>
 <script>
 "use strict";
