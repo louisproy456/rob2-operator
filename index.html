@@ -2,6 +2,14 @@
 <!--
   Rob2 Operator - universal browser controller for Rob2
   =====================================================
+  REV 0.9  (2026-10-08)  - SIMPLER: TOUCH JOYSTICK ONLY
+      * The game controller is gone (old sections 3 "Controller" and 4 "Drive", the Learn
+        wizard, the control styles and the motion table). Driving from this page is done with
+        the touch joystick under the video.
+      * Kept: Enable driving, STOP ALL, Reset e-stop (in the touch panel and on the video),
+        the SPACE key = STOP ALL on a computer, Watch only, the robot link, the video.
+      * Driving and safety rules are unchanged (8 commands a second, STOP when you let go,
+        driving OFF when the page is hidden).
   REV 0.8  (2026-10-08)  - TOUCH DRIVING with the phone held UPRIGHT
       * Under the video: an on-screen JOYSTICK (8 directions, like the Combined style:
         forward, backward, strafe left / right and the 4 diagonals), ROTATE L / ROTATE R
@@ -162,58 +170,16 @@ button[disabled] { opacity: .45; cursor: default; }
 .info div { overflow-wrap: anywhere; }
 details > summary { cursor: pointer; font-weight: 600; margin: 6px 0; }
 
-/* ---- controller picture ---- */
-.pad { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; margin: 8px 0 4px; }
-.shoulders { display: flex; justify-content: space-between; grid-column: 1 / -1; gap: 8px; }
-.shoulders > div { display: flex; gap: 6px; }
-.k { min-width: 44px; padding: 6px 8px; text-align: center; border-radius: 8px; background: var(--key);
-     font: 600 13px var(--mono); border: 1px solid var(--line); transition: background .06s; }
-.k.on { background: var(--key-on); color: var(--key-on-ink); border-color: transparent; }
-.k.unmapped { opacity: .35; border-style: dashed; }
-.dpad, .face { display: grid; grid-template-columns: repeat(3, 44px); grid-template-rows: repeat(3, 34px); gap: 4px; justify-content: center; }
-.dpad .k, .face .k { min-width: 0; display: flex; align-items: center; justify-content: center; padding: 0; }
-.mid { display: flex; flex-direction: column; gap: 6px; align-items: center; }
-.sticks { display: flex; justify-content: space-around; grid-column: 1 / -1; gap: 12px; margin-top: 6px; }
-.stick { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.ring { width: 96px; height: 96px; border-radius: 50%; border: 2px solid var(--line); position: relative; background: var(--key); }
-.ring::after { content: ""; position: absolute; inset: 24px; border-radius: 50%; border: 1px dashed var(--line); } /* push threshold 0.5 */
-.dot { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); position: absolute; left: 37px; top: 37px; }
-.raw { margin-top: 10px; }
-
-/* ---- sticks preview ---- */
-.motion { font: 700 26px var(--sans); letter-spacing: .3px; margin: 2px 0 6px; overflow-wrap: anywhere; }
-.motion.stop { color: var(--muted); }
-.motion.estop { color: var(--bad); }
-.bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin: 6px 0; }
-.bar span { height: 10px; border-radius: 3px; background: var(--key); }
-.bar span.on { background: var(--accent); }
-table { border-collapse: collapse; width: 100%; font-size: 13px; }
-td, th { padding: 4px 6px; text-align: left; border-bottom: 1px solid var(--line); }
-th { color: var(--muted); font-weight: 600; font-size: 12px; }
-td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
-.tablewrap { overflow-x: auto; }
-tr.hit td { background: var(--ok-bg); color: var(--ok); }
-
 /* ---- drive controls ---- */
 button.danger { background: var(--bad); color: #fff; border-color: transparent; }
 @media (prefers-color-scheme: dark) { button.danger { color: #2a0b0b; } }
 button.big { font-size: 16px; padding: 12px 18px; }
-.drivebar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
-.drivebar .spacer { flex: 1 1 auto; }
 
 .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .seg button { border: 0; border-radius: 0; background: var(--key); padding: 8px 12px; flex: 1 1 auto; }
 .seg button.on { background: var(--accent); color: var(--accent-ink); }
 
-/* ---- learn wizard ---- */
-#learn { border: 2px solid var(--accent); }
-#learn .prompt { font: 700 22px var(--sans); margin: 4px 0 8px; }
-.steps { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
-.steps span { font: 11px var(--mono); padding: 2px 6px; border-radius: 6px; background: var(--key); }
-.steps span.done { background: var(--ok-bg); color: var(--ok); }
-.steps span.now { background: var(--accent); color: var(--accent-ink); }
-.steps span.skip { background: var(--warn-bg); color: var(--warn); }
-@media (prefers-reduced-motion: reduce) { .k { transition: none; } }
+
 
 /* ---- REV 0.7: live video from the robot ---- */
 #videoBox { padding: 10px; }
@@ -228,7 +194,7 @@ button.big { font-size: 16px; padding: 12px 18px; }
 .vstop[disabled] { opacity: .45; }
 .vmsg { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 84%; text-align: center;
         font: 600 15px var(--sans); color: #eee; background: rgba(0,0,0,.55); padding: 10px 14px; border-radius: 10px; border: 0; }
-button.vmsg { cursor: pointer; text-decoration: underline; }
+button.vmsg { cursor: default; } button.vmsg:not([disabled]) { cursor: pointer; text-decoration: underline; }
 .vfrozen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
            background: rgba(198, 40, 40, .45); color: #fff; font: 800 24px var(--sans); text-align: center; letter-spacing: 1px;
            pointer-events: none; padding: 0 12px; }
@@ -280,22 +246,13 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
                         padding-left: calc(8px + env(safe-area-inset-left, 0px)); padding-right: calc(8px + env(safe-area-inset-right, 0px));
                         padding-bottom: calc(5px + env(safe-area-inset-bottom, 0px)); }
 }
-/* phones: a smaller controller picture so it fits inside the panel */
-@media (max-width: 460px) {
-  .dpad, .face { grid-template-columns: repeat(3, 34px); grid-template-rows: repeat(3, 30px); gap: 3px; }
-  .pad { gap: 6px; }
-  .k { min-width: 36px; padding: 5px 4px; font-size: 12px; }
-  .ring { width: 84px; height: 84px; }
-  .ring::after { inset: 21px; }
-  .dot { left: 31px; top: 31px; }
-}
 </style>
 </head>
 <body>
 
 <header>
   <h1>Rob2 Operator</h1>
-  <span class="rev">REV 0.8 · video + touch driving</span>
+  <span class="rev">REV 0.9 · video + touch joystick</span>
   <span class="step">Motion commands are sent only while "Driving" is ON</span>
 </header>
 
@@ -402,102 +359,6 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
     </div>
   </section>
 
-  <!-- ===================== STEP 1: CONTROLLER ===================== -->
-  <section id="controller">
-    <h2>3 · Controller</h2>
-    <div id="padStatus" class="row"><span class="pill warn">no controller yet</span>
-      <span class="small">Plug in or pair the controller, then press any button.</span></div>
-    <div class="row" style="margin-top:10px">
-      <button id="btnLearn" class="primary" disabled>Learn this controller</button>
-      <button id="btnForget" disabled>Forget learned layout</button>
-    </div>
-
-    <div class="pad" aria-label="Controller picture">
-      <div class="shoulders">
-        <div><span class="k" data-name="LT">LT</span><span class="k" data-name="LB">LB</span></div>
-        <div><span class="k" data-name="RB">RB</span><span class="k" data-name="RT">RT</span></div>
-      </div>
-      <div class="dpad">
-        <span></span><span class="k" data-name="UP">▲</span><span></span>
-        <span class="k" data-name="LEFT">◀</span><span></span><span class="k" data-name="RIGHT">▶</span>
-        <span></span><span class="k" data-name="DOWN">▼</span><span></span>
-      </div>
-      <div class="mid">
-        <span class="k" data-name="BACK">BACK</span>
-        <span class="k" data-name="START">START</span>
-      </div>
-      <div class="face">
-        <span></span><span class="k" data-name="Y">Y</span><span></span>
-        <span class="k" data-name="X">X</span><span></span><span class="k" data-name="B">B</span>
-        <span></span><span class="k" data-name="A">A</span><span></span>
-      </div>
-      <div class="sticks">
-        <div class="stick"><div class="ring"><div class="dot" id="dotL"></div></div>
-          <span class="small" id="posLwrap">LEFT stick: <b id="posL" class="mono">CENTRE</b></span></div>
-        <div class="stick"><div class="ring"><div class="dot" id="dotR"></div></div>
-          <span class="small">RIGHT stick (not used)</span></div>
-      </div>
-    </div>
-
-    <div class="raw small">
-      <div>Raw numbers (for troubleshooting):</div>
-      <div class="mono" id="raw">—</div>
-    </div>
-  </section>
-
-  <!-- ===================== LEARN WIZARD (hidden until used) ===================== -->
-  <section id="learn" class="wide" hidden>
-    <h2>Learn this controller</h2>
-    <div class="prompt" id="learnPrompt">—</div>
-    <div class="small" id="learnHint">Press and hold until it turns green, then let go.</div>
-    <div class="steps" id="learnSteps"></div>
-    <div class="row">
-      <button id="btnSkip">Skip this one</button>
-      <button id="btnCancel">Cancel</button>
-    </div>
-  </section>
-
-  <!-- ===================== STICKS PREVIEW ===================== -->
-  <section id="preview" class="wide">
-    <h2>4 · Drive (same table as robot_operator.py --sticks)</h2>
-    <div class="drivebar">
-      <button id="btnArm" class="primary big" type="button" disabled>Enable driving</button>
-      <span class="pill warn" id="pillDrive">Driving: OFF</span>
-      <span class="spacer"></span>
-      <button id="btnStopAll" class="danger big" type="button" disabled>STOP ALL</button>
-      <button id="btnReset" class="big" type="button" disabled>Reset e-stop</button>
-    </div>
-    <div class="row" style="margin-bottom:10px">
-      <span class="small">Control style</span>
-      <span class="seg" role="group" aria-label="Control style">
-        <button type="button" id="styleSticks">Sticks</button>
-        <button type="button" id="styleButtons">Buttons</button>
-        <button type="button" id="styleCombined">Combined</button>
-      </span>
-      <span class="small" id="styleNote"></span>
-    </div>
-    <div class="note warn" id="driveMsg">Connect to the robot first (section 2). Until driving is ON, this is only a preview.</div>
-    <div class="motion stop" id="motion">STOP</div>
-    <div class="row">
-      <span class="small">Speed level</span>
-      <b class="mono" id="lvl">2/4 · 50%</b>
-      <span class="pill warn" id="aheld" hidden>A held = 100%</span>
-      <span class="small" id="lastDpad"></span>
-    </div>
-    <div class="bar" id="bar"><span></span><span></span><span></span><span></span></div>
-    <div class="row mono" id="cmd">v=+0.000  vy=+0.000  w=+0.000</div>
-    <div class="row mono" id="sentLine">not sending</div>
-    <div class="row mono" id="ledLine"></div>
-    <div class="row mono" id="echoLine"></div>
-    <div class="tablewrap" style="margin-top:10px">
-      <table id="table">
-        <thead><tr><th>Do this</th><th>Motion</th><th>v m/s</th><th>vy m/s</th><th>w rad/s</th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-    <p class="small" id="tableNote"></p>
-  </section>
-
 </main>
 
 <script src="mqtt.min.js"></script>
@@ -507,10 +368,9 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
    SETTINGS - the same numbers as robot_operator.py REV 3.4 (--sticks)
    ======================================================================= */
 const MAX_V = 0.5, MAX_VY = 0.4, MAX_W = 1.5;    // m/s, m/s, rad/s  (robot_link.py)
-const SPEED_LEVELS = [0.25, 0.50, 0.75, 1.00];   // D-pad UP / DOWN steps
+const SPEED_LEVELS = [0.25, 0.50, 0.75, 1.00];   // the 25 / 50 / 75 / 100 % buttons
 const SPEED_START = 1;                            // start at 50 %
-const STICK_PUSH = 0.5;                           // how far the stick must go to count
-const TOUCH_CONTROLS = false;                     // (used from Step 3: on-screen controls default)
+const STICK_PUSH = 0.5;                           // how far the touch joystick must go to count (the dashed circle)
 
 /* The --sticks table. Speeds are written for 100 % and scaled by the level.
    +v = forward, +vy = LEFT, +w = turn LEFT (same signs as the Python program). */
@@ -529,138 +389,20 @@ const STICK_MOTIONS = [
 ];
 const STOP_ALL = ["LB", "RB", "START"];           // hold all three = latched e-stop (Step 3)
 
-/* =======================================================================
-   CONTROLLER LAYOUTS
-   A "binding" says where a named control lives on the controller:
-     {t:"b", i}      button number i
-     {t:"a", i, s}   axis i pushed past half-way in direction s (+1 / -1)
-     {t:"h", i, v}   "hat" axis i showing the value v (some D-pads work like this)
-   A stick direction is {i, s}: axis i, and s = +1 if "right"/"down" is positive.
-   ======================================================================= */
-const BUTTON_NAMES = ["A","B","X","Y","LB","RB","LT","RT","BACK","START","UP","DOWN","LEFT","RIGHT"];
-
-// Browsers give this layout to most controllers ("mapping: standard")
-const STANDARD = {
-  buttons: { A:{t:"b",i:0}, B:{t:"b",i:1}, X:{t:"b",i:2}, Y:{t:"b",i:3},
-             LB:{t:"b",i:4}, RB:{t:"b",i:5}, LT:{t:"b",i:6}, RT:{t:"b",i:7},
-             BACK:{t:"b",i:8}, START:{t:"b",i:9},
-             UP:{t:"b",i:12}, DOWN:{t:"b",i:13}, LEFT:{t:"b",i:14}, RIGHT:{t:"b",i:15} },
-  lx: {i:0, s:1}, ly: {i:1, s:1}, rx: {i:2, s:1}, ry: {i:3, s:1},
-};
-
-// What the Learn wizard asks for, in order. Only the controls --sticks needs + LT/RT/BACK.
-const LEARN_STEPS = [
-  {key:"A",     kind:"button", say:"Press  A  (bottom face button)"},
-  {key:"B",     kind:"button", say:"Press  B  (right face button)"},
-  {key:"X",     kind:"button", say:"Press  X  (left face button)"},
-  {key:"Y",     kind:"button", say:"Press  Y  (top face button)"},
-  {key:"LB",    kind:"button", say:"Press  LB  (top-left shoulder)"},
-  {key:"RB",    kind:"button", say:"Press  RB  (top-right shoulder)"},
-  {key:"LT",    kind:"button", say:"Pull  LT  (lever under LB)"},
-  {key:"RT",    kind:"button", say:"Pull  RT  (lever under RB)"},
-  {key:"BACK",  kind:"button", say:"Press  BACK  (small, middle left)"},
-  {key:"START", kind:"button", say:"Press  START  (small, middle right)"},
-  {key:"UP",    kind:"button", say:"Press the D-pad  UP"},
-  {key:"DOWN",  kind:"button", say:"Press the D-pad  DOWN"},
-  {key:"LEFT",  kind:"button", say:"Press the D-pad  LEFT"},
-  {key:"RIGHT", kind:"button", say:"Press the D-pad  RIGHT"},
-  {key:"lx",    kind:"axis",   say:"Push the LEFT stick  RIGHT"},
-  {key:"ly",    kind:"axis",   say:"Push the LEFT stick  DOWN  (towards you)"},
-  {key:"rx",    kind:"axis",   say:"Push the RIGHT stick  RIGHT"},
-];
-
-/* ---- saving learned layouts on THIS device (never leaves it) ---- */
-const STORE_KEY = "rob2.layouts.v1";
-function loadLearned() {
-  try { return JSON.parse(localStorage.getItem(STORE_KEY) || "{}"); } catch (e) { return {}; }
-}
-function saveLearned(all) {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(all)); return true; } catch (e) { return false; }
-}
-let learned = loadLearned();
+const $ = (id) => document.getElementById(id);     // short name: $("vid") = the element with id="vid"
 
 /* =======================================================================
-   HELPERS
+   FROM A DIRECTION TO A ROBOT COMMAND
+   The touch joystick gives one of 8 directions ('UP', 'UP+RIGHT', ... or 'CENTRE').
+   The ROTATE buttons are "LEFT/RIGHT + Y" in the same table (STICK_MOTIONS).
    ======================================================================= */
-const $ = (id) => document.getElementById(id);
-const keyEls = {};
-document.querySelectorAll(".k[data-name]").forEach(el => keyEls[el.dataset.name] = el);
-
-function layoutFor(gp) {
-  if (learned[gp.id]) return { layout: learned[gp.id], source: "learned on this device" };
-  if (gp.mapping === "standard") return { layout: STANDARD, source: "standard (automatic)" };
-  return { layout: null, source: "not standard — please use Learn" };
-}
-
-function pressed(gp, bind) {
-  if (!bind) return false;
-  if (bind.t === "b") { const b = gp.buttons[bind.i]; return !!b && (b.pressed || b.value > 0.5); }
-  if (bind.t === "a") { const v = gp.axes[bind.i]; return v !== undefined && bind.s * v > 0.5; }
-  if (bind.t === "h") { const v = gp.axes[bind.i]; return v !== undefined && Math.abs(v - bind.v) < 0.1; }
-  return false;
-}
-function axis(gp, a) {
-  if (!a) return 0;
-  const v = gp.axes[a.i];
-  return (v === undefined || Math.abs(v) > 1.01) ? 0 : a.s * v;   // > 1.01 = a hat resting, ignore
-}
-
-/* Read every named control from the controller */
-function readPad(gp, layout) {
-  const st = { btn: {}, lx: 0, ly: 0, rx: 0, ry: 0 };
-  for (const n of BUTTON_NAMES) st.btn[n] = layout ? pressed(gp, layout.buttons[n]) : false;
-  if (layout) { st.lx = axis(gp, layout.lx); st.ly = axis(gp, layout.ly); st.rx = axis(gp, layout.rx); st.ry = axis(gp, layout.ry); }
-  return st;
-}
-
-/* Same rule as stick_position() in robot_operator.py */
-function stickPosition(lx, ly) {
-  const x = lx, y = -ly;                    // + = right, + = up
-  if (Math.max(Math.abs(x), Math.abs(y)) < STICK_PUSH) return "CENTRE";
-  if (Math.abs(y) >= Math.abs(x)) return y > 0 ? "UP" : "DOWN";
-  return x > 0 ? "RIGHT" : "LEFT";
-}
-
-/* Same rule as stick_command() in robot_operator.py. Returns {name, v, vy, w, stopAll} */
-function stickCommand(st, level) {
-  if (STOP_ALL.every(n => st.btn[n])) return { name: "STOP ALL (e-stop)", v: 0, vy: 0, w: 0, stopAll: true };
-  if (st.btn.A) level = 1.0;                // hold A = full speed
-  const pos = stickPosition(st.lx, st.ly);
-  if (pos === "CENTRE") return { name: "STOP (stick centred)", v: 0, vy: 0, w: 0, stopAll: false };
-  const faces = ["B", "X", "Y"].filter(f => st.btn[f]);
-  if (faces.length > 1) return { name: "STOP (more than one of B/X/Y)", v: 0, vy: 0, w: 0, stopAll: false };
-  const face = faces[0] || null;
-  for (const [p, f, name, kv, kvy, kw] of STICK_MOTIONS) {
-    if (p === pos && f === face) {
-      return { name, v: +(kv * MAX_V * level).toFixed(3), vy: +(kvy * MAX_VY * level).toFixed(3),
-               w: +(kw * MAX_W * level).toFixed(3), stopAll: false };
-    }
-  }
-  return { name: `STOP (stick ${pos} + ${face} not in the table)`, v: 0, vy: 0, w: 0, stopAll: false };
-}
-
-/* =======================================================================
-   REV 0.4 - "BUTTONS" CONTROL STYLE: 14 buttons, both sticks ignored.
-   The D-pad does the job of the left stick, so the SAME table (STICK_MOTIONS) is used:
-     D-pad direction + X / B / Y.   Two D-pad directions together = that diagonal.
-   ======================================================================= */
-const DPAD_DIAGONALS = {                 // two D-pad directions held together
+const DPAD_DIAGONALS = {                 // the 4 corners of the joystick = the 4 diagonals
   "UP+LEFT": "DIAGONAL FWD-LEFT", "UP+RIGHT": "DIAGONAL FWD-RIGHT",
   "DOWN+LEFT": "DIAGONAL BACK-LEFT", "DOWN+RIGHT": "DIAGONAL BACK-RIGHT",
 };
 
-/* 'UP', 'DOWN', 'LEFT', 'RIGHT', 'UP+LEFT' ..., 'CENTRE', or 'CONFLICT' (opposite directions together) */
-function dpadPosition(st) {
-  const b = st.btn;
-  if ((b.UP && b.DOWN) || (b.LEFT && b.RIGHT)) return "CONFLICT";
-  const vert = b.UP ? "UP" : b.DOWN ? "DOWN" : "", horiz = b.LEFT ? "LEFT" : b.RIGHT ? "RIGHT" : "";
-  if (vert && horiz) return vert + "+" + horiz;
-  return vert || horiz || "CENTRE";
-}
-
-/* A direction ('UP', 'UP+LEFT', ..., 'CENTRE', 'CONFLICT') + the X / B / Y buttons -> the command.
-   Used by the Buttons style (direction from the D-pad) and the Combined style (stick or D-pad).
-   "what" is only for the message on screen: "D-pad", "stick" ... */
+/* A direction ('UP', 'UP+LEFT', ..., 'CENTRE') + Y (= rotate) -> the command {name, v, vy, w}.
+   "what" is only for the message on screen. */
 function directionCommand(st, level, pos, what) {
   const stop = (name) => ({ name, v: 0, vy: 0, w: 0, stopAll: false });
   if (STOP_ALL.every(n => st.btn[n])) return { name: "STOP ALL (e-stop)", v: 0, vy: 0, w: 0, stopAll: true };
@@ -683,11 +425,10 @@ function directionCommand(st, level, pos, what) {
            w: +(kw * MAX_W * level).toFixed(3), stopAll: false };
 }
 
-function buttonCommand(st, level) { return directionCommand(st, level, dpadPosition(st), "D-pad"); }
 
 /* =======================================================================
-   REV 0.5 - "COMBINED" CONTROL STYLE: left stick OR D-pad.
-   The stick is read in 8 directions (each 45 degrees wide), so a corner is a diagonal.
+   THE 8 DIRECTIONS OF THE TOUCH JOYSTICK
+   Each direction is 45 degrees wide, so a corner is a diagonal. Inside the dashed circle = STOP.
    ======================================================================= */
 const STICK8 = ["RIGHT", "UP+RIGHT", "UP", "UP+LEFT", "LEFT", "DOWN+LEFT", "DOWN", "DOWN+RIGHT"];
 function stickPosition8(lx, ly) {
@@ -696,33 +437,6 @@ function stickPosition8(lx, ly) {
   const sector = Math.round(Math.atan2(y, x) / (Math.PI / 4));   // -4 .. 4, 0 = right, 2 = up
   return STICK8[(sector + 8) % 8];
 }
-/* The D-pad wins when it is pressed; otherwise the stick decides. */
-function combinedPosition(st) {
-  const d = dpadPosition(st);
-  return d !== "CENTRE" ? { pos: d, what: "D-pad" } : { pos: stickPosition8(st.lx, st.ly), what: "stick" };
-}
-function combinedCommand(st, level) {
-  const { pos, what } = combinedPosition(st);
-  return directionCommand(st, level, pos, what);
-}
-
-/* ---- which style is in use on this device ---- */
-const STYLE_KEY = "rob2.style.v1";
-const IS_IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
-               (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);   // iPadOS says "Mac"
-let controlStyle = (() => {
-  let v = null; try { v = localStorage.getItem(STYLE_KEY); } catch (e) {}
-  return (v === "sticks" || v === "buttons" || v === "combined") ? v : (IS_IOS ? "buttons" : "sticks");
-})();
-function commandFor(st, level) {
-  return controlStyle === "buttons" ? buttonCommand(st, level)
-       : controlStyle === "combined" ? combinedCommand(st, level) : stickCommand(st, level);
-}
-function speedStep(st) {                    // +1 = faster, -1 = slower, 0 = nothing
-  // Sticks style: D-pad UP / DOWN.  Buttons and Combined (the D-pad is busy driving): RT / LT.
-  return controlStyle === "sticks" ? (st.btn.UP ? 1 : st.btn.DOWN ? -1 : 0) : (st.btn.RT ? 1 : st.btn.LT ? -1 : 0);
-}
-
 const fmt = (x) => (x >= 0 ? "+" : "") + x.toFixed(3);
 const pct = (x) => Math.round(x * 100) + "%";
 
@@ -731,11 +445,11 @@ const pct = (x) => Math.round(x * 100) + "%";
    ======================================================================= */
 function deviceCheck() {
   const rows = [
-    ["Secure page (HTTPS)", window.isSecureContext, "needed for the controller and the robot link"],
-    ["Controller support (Gamepad API)", typeof navigator.getGamepads === "function", "needed to read the controller"],
+    ["Secure page (HTTPS)", window.isSecureContext, "needed for the robot link and the video"],
+    ["Touch screen", navigator.maxTouchPoints > 0, "for the touch joystick (a mouse also works)"],
     ["WebSocket", "WebSocket" in window, "needed for EMQX (Step 2)"],
     ["Keep screen awake", "wakeLock" in navigator, "nice to have"],
-    ["Saving settings on this device", (() => { try { localStorage.setItem("rob2.t", "1"); localStorage.removeItem("rob2.t"); return true; } catch (e) { return false; } })(), "needed to remember the Learn result and (Step 2) the password"],
+    ["Saving settings on this device", (() => { try { localStorage.setItem("rob2.t", "1"); localStorage.removeItem("rob2.t"); return true; } catch (e) { return false; } })(), "needed to remember the settings and the password"],
   ];
   $("checks").innerHTML = rows.map(([label, ok, why], i) =>
     `<span class="pill ${ok ? "ok" : (i >= 3 ? "warn" : "bad")}">${ok ? "OK" : (i >= 3 ? "no" : "MISSING")}</span>
@@ -744,244 +458,8 @@ function deviceCheck() {
 }
 deviceCheck();
 
-/* =======================================================================
-   STEP 1 - CONTROLLER LOOP
-   ======================================================================= */
-let speedI = SPEED_START, lastDpad = 0;
-let current = null;           // the controller in use (first one found)
-let learning = null;          // the Learn wizard state when active
-
-// Build the table once
-function buildTable(level) {
-  const what = controlStyle === "buttons" ? "D-pad" : controlStyle === "combined" ? "Stick or D-pad" : "Stick";
-  $("table").querySelector("tbody").innerHTML = STICK_MOTIONS.map(([p, f, name, kv, kvy, kw]) =>
-    `<tr data-name="${name}"><td>${what} ${p}${f ? " + " + f : ""}</td><td>${name}</td>
-     <td class="num">${fmt(kv * MAX_V * level)}</td><td class="num">${fmt(kvy * MAX_VY * level)}</td>
-     <td class="num">${fmt(kw * MAX_W * level)}</td></tr>`).join("");
-}
-let tableLevel = null;
-
-function drawStyle() {                      // the switch, the hints and the table for the chosen style
-  const b = controlStyle === "buttons", c = controlStyle === "combined";
-  $("styleSticks").classList.toggle("on", controlStyle === "sticks");
-  $("styleButtons").classList.toggle("on", b); $("styleCombined").classList.toggle("on", c);
-  $("styleNote").textContent = b ? "14 buttons — both sticks are ignored"
-    : c ? "left stick (8 directions) or D-pad, + X / B / Y" : "left stick + X / B / Y";
-  $("lastDpad").textContent = controlStyle === "sticks" ? "D-pad UP / DOWN changes the speed" : "RT = faster, LT = slower";
-  $("tableNote").textContent = b
-    ? "Let go of the D-pad = STOP. Two D-pad directions together also give the diagonals. LB + RB + START = STOP ALL, BACK = reset e-stop. Speeds in the table are for the current level."
-    : c ? "Let go = STOP. Pushing the stick to a corner (or two D-pad directions together) also gives the diagonals. If both are used, the D-pad wins. LB + RB + START = STOP ALL, BACK = reset e-stop. Speeds in the table are for the current level."
-    : "Let go of the stick = STOP. LB + RB + START (or the SPACE key) = STOP ALL. Speeds in the table are for the current level.";
-  $("posLwrap").style.opacity = b ? 0.45 : 1;
-  tableLevel = null;                        // rebuild the table on the next frame
-}
-function setStyle(v) {
-  if (v === controlStyle) return;
-  if (typeof drive !== "undefined" && drive.armed) setArmed(false, "the control style was changed");
-  controlStyle = v;
-  try { localStorage.setItem(STYLE_KEY, v); } catch (e) {}
-  drawStyle();
-}
-
-function firstPad() {
-  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-  for (const gp of pads) if (gp && gp.connected) return gp;
-  return null;
-}
-
-function frame() {
-  const gp = firstPad();
-  if (!gp) {
-    if (current) {
-      current = null;
-      $("padStatus").innerHTML = `<span class="pill bad">controller disconnected</span>
-        <span class="small">Plug it back in, then press any button.</span>`;
-      $("btnLearn").disabled = $("btnForget").disabled = true;
-    }
-    showState(null, null);
-    requestAnimationFrame(frame);
-    return;
-  }
-
-  const { layout, source } = layoutFor(gp);
-  if (!current || current.id !== gp.id || current.source !== source) {
-    current = { id: gp.id, source };
-    const cls = layout ? "ok" : "warn";
-    $("padStatus").innerHTML = `<span class="pill ${cls}">${layout ? "ready" : "needs Learn"}</span>
-      <span class="mono">${escapeHtml(gp.id)}</span>
-      <span class="small">layout: ${source} · mapping reported: "${gp.mapping || "none"}" · ${gp.buttons.length} buttons, ${gp.axes.length} axes</span>`;
-    $("btnLearn").disabled = false;
-    $("btnForget").disabled = !learned[gp.id];
-  }
-
-  // raw numbers
-  const down = gp.buttons.map((b, i) => (b.pressed || b.value > 0.5) ? i : null).filter(i => i !== null);
-  $("raw").textContent = `buttons down [${down.join(", ")}]   axes [${gp.axes.map(a => a.toFixed(2)).join(", ")}]`;
-
-  if (learning) learnTick(gp);
-  else showState(gp, layout);
-  requestAnimationFrame(frame);
-}
-
-function showState(gp, layout) {
-  const st = gp && layout ? readPad(gp, layout) : { btn: {}, lx: 0, ly: 0, rx: 0, ry: 0 };
-  for (const n of BUTTON_NAMES) {
-    keyEls[n].classList.toggle("on", !!st.btn[n]);
-    keyEls[n].classList.toggle("unmapped", !!layout && !layout.buttons[n]);
-  }
-  const travel = ($("dotL").parentElement.clientWidth - 22) / 2;   // how far the dot can move inside the ring
-  $("dotL").style.transform = `translate(${st.lx * travel}px, ${st.ly * travel}px)`;
-  $("dotR").style.transform = `translate(${st.rx * travel}px, ${st.ry * travel}px)`;
-  $("posL").textContent = controlStyle === "buttons" ? "ignored"
-    : controlStyle === "combined" ? stickPosition8(st.lx, st.ly) : stickPosition(st.lx, st.ly);
-
-  // speed level: one step per press (Sticks: D-pad UP / DOWN.  Buttons: RT / LT)
-  const d = speedStep(st);
-  if (d && d !== lastDpad) {
-    const old = speedI;
-    speedI = Math.max(0, Math.min(SPEED_LEVELS.length - 1, speedI + d));
-    const key = controlStyle === "sticks" ? `D-pad ${d > 0 ? "UP" : "DOWN"}` : (d > 0 ? "RT" : "LT");
-    $("lastDpad").textContent = speedI === old
-      ? `${key}: already at ${d > 0 ? "MAX" : "MIN"} (${pct(SPEED_LEVELS[speedI])})`
-      : `${key}: ${pct(SPEED_LEVELS[old])} → ${pct(SPEED_LEVELS[speedI])}`;
-  }
-  lastDpad = d;
-
-  const lvl = SPEED_LEVELS[speedI];
-  const c = (typeof touchCommand === "function" && touchCommand()) || commandFor(st, lvl);   // REV 0.8: show the touch command
-  const shown = st.btn.A ? 1.0 : lvl;
-  $("lvl").textContent = `${speedI + 1}/${SPEED_LEVELS.length} · ${pct(lvl)}`;
-  $("aheld").hidden = !st.btn.A;
-  [...$("bar").children].forEach((s, i) => s.classList.toggle("on", i <= speedI));
-  $("cmd").textContent = `v=${fmt(c.v)}  vy=${fmt(c.vy)}  w=${fmt(c.w)}`;
-  const m = $("motion");
-  m.textContent = c.name;
-  m.className = "motion" + (c.stopAll ? " estop" : (c.name.startsWith("STOP") ? " stop" : ""));
-  if (tableLevel !== shown) { buildTable(shown); tableLevel = shown; }
-  $("table").querySelectorAll("tbody tr").forEach(tr => tr.classList.toggle("hit", tr.dataset.name === c.name));
-}
-
-function escapeHtml(s) { return String(s).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch])); }
-
-/* =======================================================================
-   LEARN WIZARD
-   ======================================================================= */
-function startLearn() {
-  const gp = firstPad();
-  if (!gp) return;
-  learning = { id: gp.id, step: 0, layout: { buttons: {}, lx: null, ly: null, rx: null, ry: null },
-               rest: gp.axes.slice(), startAxes: gp.axes.slice(),
-               waitRelease: true, holdSince: 0, candidate: null, status: [] };
-  $("learn").hidden = false;
-  $("learn").scrollIntoView({ behavior: "smooth", block: "center" });
-  drawLearn();
-}
-
-function drawLearn() {
-  const s = LEARN_STEPS[learning.step];
-  $("learnPrompt").textContent = s ? s.say : "Done!";
-  $("learnSteps").innerHTML = LEARN_STEPS.map((x, i) =>
-    `<span class="${learning.status[i] || (i === learning.step ? "now" : "")}">${x.key}</span>`).join("");
-}
-
-/* "Let go" = no button pressed, and every axis sits where axes rest:
-   near 0 (sticks), or at the edge (triggers rest at -1, D-pad "hats" rest above 1).
-   The axes must also stay still for 0.3 s. Then that position becomes the new "rest",
-   so a stick that was pushed when Learn was tapped does not confuse the wizard. */
-function calm(gp) {
-  if (gp.buttons.some(b => b.pressed || b.value > 0.5)) return false;
-  return gp.axes.every((v, i) => isHat(i)
-    ? Math.abs(v) > 1.01                               // a D-pad hat is only "let go" when back at its rest value
-    : (Math.abs(v) < 0.3 || Math.abs(v) > 0.95));
-}
-/* A D-pad "hat" axis rests OUTSIDE -1..+1 (about 1.29) and jumps to fixed values when pressed */
-function isHat(i) { return Math.abs(learning.rest[i]) > 1.01 || Math.abs(learning.startAxes[i]) > 1.01; }
-
-function detect(gp, kind) {
-  // a button?
-  if (kind === "button") {
-    const i = gp.buttons.findIndex(b => b.pressed || b.value > 0.5);
-    if (i >= 0) return { t: "b", i };
-  }
-  // an axis that moved a lot from where it rests?
-  let best = null;
-  gp.axes.forEach((v, i) => {
-    const r = learning.rest[i], dv = v - r;
-    const need = isHat(i) ? 0.1 : 0.6;               // a hat counts as soon as it leaves its rest value
-    if (Math.abs(dv) > need && (!best || Math.abs(dv) > best.d)) best = { i, v, r, d: Math.abs(dv) };
-  });
-  if (!best) return null;
-  const hat = isHat(best.i);
-  if (kind === "axis") return hat ? null : { i: best.i, s: best.v > best.r ? 1 : -1 };
-  return hat ? { t: "h", i: best.i, v: +best.v.toFixed(3) } : { t: "a", i: best.i, s: best.v > best.r ? 1 : -1 };
-}
-
-function learnTick(gp) {
-  if (gp.id !== learning.id) { cancelLearn(); return; }
-  const s = LEARN_STEPS[learning.step];
-  if (!s) return;
-  if (learning.waitRelease) {                          // wait until everything is let go and still
-    $("learnHint").textContent = "Let go of everything…";
-    const still = learning.lastAxes && gp.axes.every((v, i) => Math.abs(v - learning.lastAxes[i]) < 0.05);
-    learning.lastAxes = gp.axes.slice();
-    if (!calm(gp) || !still) { learning.calmSince = 0; return; }
-    if (!learning.calmSince) { learning.calmSince = performance.now(); return; }
-    if (performance.now() - learning.calmSince < 300) return;
-    learning.rest = gp.axes.slice();                   // this is where everything rests
-    learning.waitRelease = false; learning.calmSince = 0;
-    $("learnHint").textContent = "Press and hold until it turns green, then let go.";
-    return;
-  }
-  const found = detect(gp, s.kind);
-  const same = found && learning.candidate && JSON.stringify(found) === JSON.stringify(learning.candidate);
-  if (!found) { learning.candidate = null; return; }
-  if (!same) { learning.candidate = found; learning.holdSince = performance.now(); return; }
-  if (performance.now() - learning.holdSince < 300) return;   // held steady for 0.3 s
-
-  if (s.kind === "button") learning.layout.buttons[s.key] = found;
-  else learning.layout[s.key] = found;
-  learning.status[learning.step] = "done";
-  nextLearn();
-}
-
-function nextLearn(skipped) {
-  if (skipped) learning.status[learning.step] = "skip";
-  learning.step++; learning.candidate = null; learning.waitRelease = true;
-  if (learning.step >= LEARN_STEPS.length) finishLearn();
-  else drawLearn();
-}
-
-function finishLearn() {
-  const L = learning.layout;               // (the right stick UP/DOWN is not used, so it is not learned)
-  learned[learning.id] = L;
-  const ok = saveLearned(learned);
-  $("learnPrompt").textContent = ok ? "Saved on this device ✓" : "Learned (could not save — private window?)";
-  $("learnHint").textContent = "The controller test above now uses what you taught it.";
-  drawLearn();
-  learning = null;
-  current = null;                                      // refresh the status line
-  setTimeout(() => { if (!learning) $("learn").hidden = true; }, 2500);
-}
-
-function cancelLearn() { learning = null; $("learn").hidden = true; }
-
-$("btnLearn").addEventListener("click", startLearn);
-$("btnSkip").addEventListener("click", () => learning && nextLearn(true));
-$("btnCancel").addEventListener("click", cancelLearn);
-$("btnForget").addEventListener("click", () => {
-  const gp = firstPad();
-  if (gp && learned[gp.id]) { delete learned[gp.id]; saveLearned(learned); current = null; }
-});
-
-window.addEventListener("gamepadconnected", () => { current = null; });
-window.addEventListener("gamepaddisconnected", () => { current = null; });
-
-$("styleSticks").addEventListener("click", () => setStyle("sticks"));
-$("styleButtons").addEventListener("click", () => setStyle("buttons"));
-$("styleCombined").addEventListener("click", () => setStyle("combined"));
-drawStyle();
-buildTable(SPEED_LEVELS[speedI]); tableLevel = SPEED_LEVELS[speedI];
-requestAnimationFrame(frame);
+/* The speed level (0..3 = 25 / 50 / 75 / 100 %), chosen with the buttons of the touch panel */
+let speedI = SPEED_START;
 
 /* =======================================================================
    STEP 2 - ROBOT LINK (EMQX over secure WebSocket)
@@ -1254,21 +732,11 @@ const drive = { armed: false, seq: 0, sent: 0, lastSend: 0, nextT: 0,
                 last: { v: 0, vy: 0, w: 0 }, stopAllHeld: false, wake: null, estopNote: "" };
 const ZERO = { name: "STOP", v: 0, vy: 0, w: 0, stopAll: false };
 
-/* What should be sent right now? Read the controller HERE (not from the screen),
-   so a frozen screen can never keep an old command alive. */
+/* What should be sent right now? Read the touch joystick HERE (not from the screen). */
 function currentCommand() {
-  if (learning) return ZERO;                                  // teaching the controller: never drive
-  if (document.hidden || !document.hasFocus()) return ZERO;   // page not in front: the controller may be frozen
-  const tc = typeof touchCommand === "function" ? touchCommand() : null;   // REV 0.8: a finger on the touch joystick wins
-  if (tc) return tc;
-  const gp = firstPad();
-  if (!gp) return ZERO;                                       // controller unplugged
-  const { layout } = layoutFor(gp);
-  if (!layout) return ZERO;
-  const st = readPad(gp, layout);
-  const c = commandFor(st, SPEED_LEVELS[speedI]);
-  c.back = controlStyle !== "sticks" && !!st.btn.BACK && !c.stopAll;    // Buttons / Combined: BACK = reset e-stop
-  return c;
+  if (document.hidden || !document.hasFocus()) return ZERO;   // page not in front: never drive
+  const tc = typeof touchCommand === "function" ? touchCommand() : null;
+  return tc || ZERO;                                          // no finger on the joystick = STOP
 }
 
 function sendVel(c) {                       // same message as send_vel() in robot_operator.py
@@ -1282,11 +750,6 @@ function sendVel(c) {                       // same message as send_vel() in rob
 
 function driveTick() {
   const c = currentCommand();
-  // LB + RB + START on the controller: e-stop, once per press (works even when driving is OFF)
-  if (c.stopAll && !drive.stopAllHeld) estop(true, "controller");
-  drive.stopAllHeld = c.stopAll;
-  if (c.back && !drive.backHeld) estop(false, "controller");   // BACK, once per press
-  drive.backHeld = !!c.back;
   if (!drive.armed) return;
   if (!link.client || !link.connected) { setArmed(false, "the robot link dropped"); return; }
   const now = performance.now();
@@ -1327,34 +790,18 @@ function estop(on, from) {                  // same as estop() in robot_operator
   if (!link.client || !link.connected) return;
   link.client.publish(link.T.estop, JSON.stringify({ estop: on }), { qos: 1 });
   noteSent();
-  drive.estopNote = on ? `E-STOP sent (${from}). Press "Reset e-stop" (or BACK in Buttons style), then let go of the controls, to drive again.`
-                       : "E-stop reset sent. Let go of the controls once (send a STOP) to re-arm the robot.";
+  drive.estopNote = on ? `E-STOP sent (${from}). Press "Reset e-stop", then let go of the joystick, to drive again.`
+                       : "E-stop reset sent. Let go of the joystick once (send a STOP) to re-arm the robot.";
   drawDrive();
   if (!on) setTimeout(() => { if (drive.estopNote.startsWith("E-stop reset")) { drive.estopNote = ""; drawDrive(); } }, 6000);
 }
 
-function drawDrive(why) {
-  const linked = !!(link.client && link.connected);
-  $("btnArm").disabled = !linked || link.watch;
-  $("btnStopAll").disabled = $("btnReset").disabled = !linked;
-  drive.shownLinked = linked; drive.shownWatch = link.watch;
-  $("btnArm").textContent = drive.armed ? "Disable driving" : "Enable driving";
-  $("btnArm").classList.toggle("primary", !drive.armed);
-  setPill("pillDrive", drive.armed ? "ok" : "warn", drive.armed ? "Driving: ON" : "Driving: OFF");
-  const m = $("driveMsg");
-  let text = "", kind = "warn";
-  if (why) { text = `Driving switched OFF: ${why}. Zeros were sent.`; kind = "bad"; }
-  else if (drive.estopNote) { text = drive.estopNote; kind = "bad"; }
-  else if (!linked) text = "Connect to the robot first (section 2). Until driving is ON, this is only a preview.";
-  else if (link.watch) text = "WATCH ONLY: this page does not drive (another operator does). STOP ALL and Reset e-stop still work. To drive from here, untick “Watch only” in Settings and connect again.";
-  else if (!drive.armed) text = "Driving is OFF: nothing is sent. Put Rob2 on a box for the first test, then tap “Enable driving”.";
-  m.hidden = !text; m.textContent = text; m.className = "note " + kind;
+function drawDrive(why) {                   // the touch panel shows the reason for a few seconds
+  if (why) { drive.offWhy = `Driving switched OFF: ${why}. Zeros were sent.`; drive.offAt = performance.now(); }
+  else if (drive.armed) drive.offWhy = "";
 }
 
-$("btnArm").addEventListener("click", () => { drive.estopNote = ""; setArmed(!drive.armed); });
-$("btnStopAll").addEventListener("click", () => estop(true, "button"));
-$("btnReset").addEventListener("click", () => estop(false, "button"));
-// SPACE = STOP ALL (not while typing in a Settings field)
+// SPACE = STOP ALL on a computer (not while typing in a Settings field)
 window.addEventListener("keydown", (e) => {
   if (e.code !== "Space" || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
   e.preventDefault();
@@ -1366,44 +813,6 @@ document.addEventListener("visibilitychange", () => { if (document.hidden && dri
 window.addEventListener("blur", () => { if (drive.armed) setArmed(false, "the page lost focus (another window or app was selected)"); });
 window.addEventListener("pagehide", () => { if (drive.armed && link.client && link.connected) { try { sendVel(ZERO); } catch (e) {} drive.armed = false; } }, true);
 
-/* The "sent" line and the LED check (4 times a second) */
-function renderDrive() {
-  const linked = !!(link.client && link.connected);
-  if (drive.shownLinked !== linked || drive.shownWatch !== link.watch) drawDrive();   // link or mode changed
-  $("sentLine").textContent = drive.armed
-    ? `SENDING  v=${fmt(drive.last.v)}  vy=${fmt(drive.last.vy)}  w=${fmt(drive.last.w)}   @ ${SEND_HZ} Hz   sent=${drive.sent}`
-    : `not sending   (sent so far: ${drive.sent})`;
-  const el = $("ledLine");
-  if (linked && link.watch) {                 // watching: just show what the ESP32 reports
-    const f = link.stateRx && performance.now() - link.stateRx < 1500;
-    el.textContent = `ESP32 LED reports: ${f ? String(link.robotState.led ?? "?") : "(no fresh report)"}`;
-    return;
-  }
-  if (!drive.armed) { el.textContent = ""; return; }
-  const want = LED_COLORS[classify(drive.last.v, drive.last.vy, drive.last.w)];
-  const fresh = link.stateRx && performance.now() - link.stateRx < 1500;
-  const got = String(link.robotState.led ?? "?");
-  const ok = got.split(" ")[0] === want.split(" ")[0];
-  el.textContent = `LED should be: ${want}   ESP32 reports: ${fresh ? got : "(no fresh report)"}   ${fresh ? (ok ? "OK" : "different — see the robot state") : ""}`;
-}
-
-/* REV 0.5 - the whole chain on one line: page -> EMQX -> tablet -> USB -> ESP32 -> back.
-   "accepted" is the robot's own count of commands it used; it must keep going up while driving. */
-function renderEcho() {
-  const el = $("echoLine");
-  const watching = !!(link.client && link.connected && link.watch);
-  if (!drive.armed && !watching) { el.textContent = ""; return; }
-  const s = link.robotState, fresh = link.stateRx && performance.now() - link.stateRx < 1500;
-  if (!fresh) { el.textContent = "CHAIN  no fresh report from the robot (tablet app final1 open? EMQX + USB green?)"; return; }
-  const num = (x) => (typeof x === "number" ? (x >= 0 ? "+" : "") + x.toFixed(2) : "?");
-  el.textContent = (watching ? `WATCH  operator ${link.operatorStatus} → ` : `CHAIN  sent ${drive.sent} → `)
-    + `robot accepted ${s.ok ?? "?"} (stale ${s.stale ?? "?"}, old ${s.old ?? "?"})   `
-    + `robot ${s.state ?? "?"} v=${num(s.v)} w=${num(s.w)}   latency ${s.latency_ms == null ? "-" : s.latency_ms + " ms"}   `
-    + `via ${s.bridge ?? "?"} rev ${s.bridge_rev ?? "-"} → ESP32 fw ${s.fw ?? "?"}`;
-}
-setInterval(renderEcho, 250);
-setInterval(renderDrive, 250);
-drawDrive();
 </script>
 <script>
 "use strict";
@@ -1707,7 +1116,10 @@ function renderVideo() {
     strip = fresh ? `${s.state ?? "?"} · LED ${s.led ?? "?"} · lat ${s.latency_ms ?? "-"} ms · wd ${s.watchdog_trips ?? "?"}`
                   : "robot: no fresh report";
     if (link.watch) strip += ` · operator ${link.operatorStatus}`;
-    else strip += drive.armed ? ` · YOU: ${$("motion").textContent} ${$("lvl").textContent.split("·").pop().trim()}` : " · driving OFF";
+    else {
+      const tc = typeof touchCommand === "function" ? touchCommand() : null;
+      strip += drive.armed ? ` · YOU: ${tc && !tc.name.startsWith("STOP") ? tc.name : "STOP"} ${pct(SPEED_LEVELS[speedI])}` : " · driving OFF";
+    }
     if (drive.estopNote && drive.estopNote.startsWith("E-STOP")) strip = "E-STOP SENT · " + strip;
   }
   $("vStrip").textContent = strip;
@@ -1837,6 +1249,7 @@ function renderTouch() {
   if (!linked) text = "Connect to EMQX first (section 2).";
   else if (watch) text = "WATCH ONLY: the pocket remote drives. The touch joystick is hidden. To drive from this phone, untick “Watch only” in Settings and connect again. STOP ALL on the video still works.";
   else if (drive.estopNote && drive.estopNote.startsWith("E-STOP")) text = "E-STOP is ON: press Reset e-stop, then let go of everything, to drive again.";
+  else if (!drive.armed && drive.offWhy && performance.now() - drive.offAt < 8000) text = drive.offWhy;
   else if (!drive.armed) text = "Driving is OFF. Tap “Enable driving” to use the joystick (the robot only moves while your finger is on it).";
   note.hidden = !text; note.textContent = text;
 }
