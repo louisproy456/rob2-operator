@@ -2,6 +2,24 @@
 <!--
   Rob2 Operator - universal browser controller for Rob2
   =====================================================
+  REV 0.11 (2026-10-09)  - SIMPLE SCREEN + EXPERT SCREEN (passcode), PHONE ONLY DRIVER
+      * SIMPLE SCREEN (what you see when the page opens): the video on top, 4 LEDs
+            N = network (EMQX)   V = video   R = the robot's own LED colour   D = driving
+        a big START DRIVING / STOP DRIVING button, the touch joystick + ROTATE + speed
+        (only while driving), STOP ALL and Reset e-stop. Nothing else.
+      * The page CONNECTS BY ITSELF when it opens, with the login saved on this phone
+        (typed once on the expert screen, "remember" ticked).
+      * The phone tells the robot "operator online" only when you tap START DRIVING, and
+        "operator offline" when you tap STOP DRIVING. In between the robot's LED blinks
+        WHITE (waiting), so you see at a glance whether the phone is driving.
+      * EXPERT SCREEN: the ⚙ button + the code 1956 (asked once per visit, until the page is
+        closed). It shows everything: settings and login, device check, robot details, PING,
+        video numbers, the LED colour bar. "◀ Simple screen" goes back.
+        NOTE: the page is public on GitHub, so the code is a CHILD LOCK against changing
+        settings by accident, not real security. The EMQX password is never in this file.
+      * The pocket joystick remote (ESP32-C3) is archived: "Watch only", the operator
+        online/offline display and the "another operator" warning are removed.
+        The phone is the only driver.
   REV 0.10 (2026-10-08)  - THE ROBOT'S LED COLOUR under the video
       * A long thin colour bar right under the video shows the colour the robot's ESP32 LED
         REPORTS, with the same 11 colours as the tablet app "final1" and the ESP32 firmware:
@@ -216,6 +234,33 @@ button.vmsg { cursor: default; } button.vmsg[disabled] { opacity: 1; } button.vm
 .vstrip span { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .vstrip button { white-space: nowrap;  font: 600 12px var(--sans); padding: 5px 9px; border-radius: 6px; background: #333; color: #fff; border: 1px solid #777; }
 .vbelow { margin-top: 8px; display: grid; gap: 6px; }
+/* ---- REV 0.11: SIMPLE SCREEN (default) and EXPERT SCREEN ---- */
+/* simple: only the video, the 4 LEDs, START DRIVING, the joystick (while driving), STOP ALL / Reset */
+body.simple header, body.simple #device, body.simple #link, body.simple #videoBox > h2,
+body.simple .vbelow, body.simple .vstrip, body.simple .vled { display: none !important; }
+body.simple main { display: block; }
+body.simple #videoBox { padding: 8px; border: 0; background: transparent; }
+body.simple:not(.armed) #tPadWrap { display: none; }       /* the joystick appears only while driving */
+body:not(.simple) #btnGear { display: none; }
+header #btnSimple { margin-left: auto; }
+.leds { display: flex; justify-content: center; gap: 26px; margin: 8px 0 4px; }
+.led { display: flex; flex-direction: column; align-items: center; gap: 2px; font: 700 13px var(--mono); color: var(--muted); }
+.led i { width: 22px; height: 22px; border-radius: 50%; background: #555; border: 2px solid rgba(0,0,0,.25);
+         box-shadow: 0 0 0 1px var(--line); display: block; }
+.led i.g { background: #00C853; box-shadow: 0 0 8px #00C853; } .led i.a { background: #FFB300; box-shadow: 0 0 8px #FFB300; }
+.led i.r { background: #D50000; box-shadow: 0 0 8px #D50000; } .led i.off { background: #555; }
+.led i.blink-fast { animation: vledBlink .3s steps(1) infinite; } .led i.blink-slow { animation: vledBlink 1s steps(1) infinite; }
+#tArm { width: 100%; font-size: 20px; padding: 16px; }
+#tArm.go { background: #00C853; color: #062a16; border-color: transparent; }
+#tArm.stopdrv { background: #FFB300; color: #2a1d00; border-color: transparent; }
+.gearrow { display: flex; justify-content: flex-end; margin-top: 10px; }
+#btnGear { font-size: 20px; padding: 6px 12px; background: transparent; }
+.lock { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; }
+.lock[hidden] { display: none; }
+.lockcard { background: var(--panel); color: var(--ink); border-radius: 12px; padding: 16px; width: min(90vw, 320px); display: grid; gap: 10px; }
+.lockcard input { font: 24px var(--mono); text-align: center; letter-spacing: 6px; padding: 8px; border-radius: 8px;
+                  border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+
 /* ---- REV 0.10: the robot's LED colour (a long thin bar under the video) ---- */
 .vled { height: 26px; margin-top: 4px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
         font: 700 12px var(--mono); letter-spacing: .5px; background: #303030; color: #ddd; border: 1px solid var(--line);
@@ -261,6 +306,11 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
   body.vid-on .vstop { top: calc(8px + env(safe-area-inset-top, 0px)); right: calc(8px + env(safe-area-inset-right, 0px));
                        font-size: 16px; padding: 12px 18px; }
   body.vid-on .vstrip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body.vid-on .leds { position: absolute; top: calc(8px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%);
+                      z-index: 4; margin: 0; gap: 14px; background: rgba(0,0,0,.55); padding: 4px 10px; border-radius: 12px; }
+  body.vid-on .led { color: #ddd; font-size: 11px; } body.vid-on .led i { width: 14px; height: 14px; }
+  body.simple.vid-on .vstrip { display: none !important; }
+  body.simple.vid-on #btnGear { display: none; }
   body.vid-on .vled { position: absolute; left: 0; right: 0; top: 0; height: 6px; margin: 0; border: 0; border-radius: 0;
                       z-index: 3; font-size: 0; }   /* sideways: a thin colour line along the top edge */
   body.vid-on .vfrozen { font-size: 30px; } body.vid-on .vfrozen small { font-size: 15px; }
@@ -270,11 +320,12 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
 }
 </style>
 </head>
-<body>
+<body class="simple">
 
 <header>
   <h1>Rob2 Operator</h1>
-  <span class="rev">REV 0.10 · video + touch joystick + LED colour</span>
+  <span class="rev">REV 0.11 · expert screen</span>
+  <button id="btnSimple" type="button">◀ Simple screen</button>
   <span class="step">Motion commands are sent only while "Driving" is ON</span>
 </header>
 
@@ -290,18 +341,21 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
       <button class="vmsg" id="vMsg" type="button" disabled>…</button>
       <button class="vstop" id="vStop" type="button" disabled>STOP ALL</button>
     </div>
+    <!-- REV 0.11: 4 status LEDs, one letter under each -->
+    <div class="leds" id="leds">
+      <div class="led" title="N = network: green = connected to EMQX, amber = connecting, red = cannot connect / login refused"><i id="ledN"></i>N</div>
+      <div class="led" title="V = video: green = live, amber = connecting, red = FROZEN, grey = video off"><i id="ledV"></i>V</div>
+      <div class="led" title="R = robot: the colour of the robot's own LED (the 11 colours of the truth table); grey = no report"><i id="ledR"></i>R</div>
+      <div class="led" title="D = driving: green = you are driving, grey = driving off, red = E-STOP"><i id="ledD"></i>D</div>
+    </div>
     <div class="vstrip"><span id="vStrip">not connected</span><button id="vReset" type="button" disabled>Reset e-stop</button></div>
     <div class="vled" id="vLed" title="the colour the robot's LED shows">ROBOT LED: ?</div>
 
     <!-- REV 0.8: TOUCH DRIVING (phone upright) -->
     <div id="tpad">
       <div id="tControls">
-        <div class="trow">
-          <button id="tArm" class="primary big" type="button" disabled>Enable driving</button>
-          <span class="seg" id="tSpeed" role="group" aria-label="Speed">
-            <button type="button">25%</button><button type="button">50%</button><button type="button">75%</button><button type="button">100%</button>
-          </span>
-        </div>
+        <button id="tArm" class="go big" type="button" disabled>START DRIVING</button>
+        <div id="tPadWrap">
         <div class="tmain" id="tPad">
           <button class="trot" id="tRotL" type="button">⟲<br>ROTATE<br>LEFT</button>
           <div class="tring" id="tRing" aria-label="Touch joystick">
@@ -314,12 +368,19 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
           <button class="trot" id="tRotR" type="button">⟳<br>ROTATE<br>RIGHT</button>
         </div>
         <div class="tmotion mono" id="tMotion">STOP</div>
+        <div class="trow" style="justify-content:center">
+          <span class="seg" id="tSpeed" role="group" aria-label="Speed">
+            <button type="button">25%</button><button type="button">50%</button><button type="button">75%</button><button type="button">100%</button>
+          </span>
+        </div>
+        </div>
       </div>
       <div class="trow" style="margin-top:8px">
         <button id="tStop" class="danger big" type="button" disabled>STOP ALL</button>
         <button id="tReset" class="big" type="button" disabled>Reset e-stop</button>
       </div>
       <div class="note warn" id="tNote" hidden></div>
+      <div class="gearrow"><button id="btnGear" type="button" title="expert screen (code)" aria-label="Expert screen">⚙</button></div>
     </div>
     <div class="vbelow">
       <div class="row">
@@ -344,11 +405,8 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
     <div class="row" id="linkPills">
       <span class="pill warn" id="pillBroker">EMQX: not connected</span>
       <span class="pill warn" id="pillRobot">Robot: ?</span>
-      <span class="pill warn" id="pillOperator" hidden>Operator: ?</span>
     </div>
     <div id="linkMsg" hidden></div>
-    <div id="otherOp" class="note warn" hidden>Another operator was already online when this page connected.
-      Use only ONE operator at a time (this page OR robot_operator.py).</div>
 
     <!-- Connect / Disconnect stay visible even when the Settings box is folded -->
     <div class="row" style="margin:10px 0">
@@ -367,7 +425,6 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
         <label for="fRobot">Robot id</label><input id="fRobot" type="text" autocapitalize="off" spellcheck="false">
         <label class="span2"><input id="fShow" type="checkbox"> show the password</label>
         <label class="span2"><input id="fRemember" type="checkbox" checked> remember these settings on this device</label>
-        <label class="span2"><input id="fWatch" type="checkbox"> <b>Watch only</b>: another operator (for example the pocket remote) is driving. This page only shows the robot; STOP ALL still works.</label>
         <div class="row span2">
           <button id="btnForgetSettings" type="button">Forget saved settings</button>
         </div>
@@ -383,6 +440,17 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
   </section>
 
 </main>
+
+<!-- REV 0.11: the code box for the expert screen -->
+<div class="lock" id="lockBox" hidden>
+  <div class="lockcard">
+    <b>Expert screen</b>
+    <span class="small">Type the code (asked once per visit).</span>
+    <input id="lockCode" type="password" inputmode="numeric" maxlength="8" autocomplete="off" aria-label="Code">
+    <div class="row"><button id="lockOk" class="primary" type="button">Open</button><button id="lockCancel" type="button">Cancel</button></div>
+    <span class="small" id="lockMsg"></span>
+  </div>
+</div>
 
 <script src="mqtt.min.js"></script>
 <script>
@@ -489,7 +557,7 @@ let speedI = SPEED_START;
    Same topics, same messages, same Last Will as robot_link.py / robot_operator.py.
    NO motion command is sent in this step.
    ======================================================================= */
-const DEFAULTS = { host: "kd6b8bb2.ala.us-east-1.emqxsl.com", port: 8084, path: "/mqtt", user: "", pass: "", robot: "bot1", watch: false };
+const DEFAULTS = { host: "kd6b8bb2.ala.us-east-1.emqxsl.com", port: 8084, path: "/mqtt", user: "", pass: "", robot: "bot1" };
 const SETTINGS_KEY = "rob2.settings.v1";
 
 function topics(robot) {                    // same as topics() in robot_link.py
@@ -503,8 +571,8 @@ const SID = Array.from(crypto.getRandomValues(new Uint8Array(4)), b => b.toStrin
 
 const link = {
   client: null, T: null, robot: null,
-  connected: false, everConnected: false, announced: false,
-  watch: false, operatorStatus: "?",        // REV 0.6: watch only = not an operator
+  connected: false, everConnected: false,
+  online: false,                            // REV 0.11: we told the robot "operator online" (= START DRIVING)
   robotStatus: "?", robotState: {}, stateRx: 0,
   pingId: 0, pingSent: new Map(), rtts: [],
 };
@@ -515,17 +583,17 @@ function loadSettings() {
   try { s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}"); } catch (e) {}
   return Object.assign({}, DEFAULTS, s);
 }
+/* REV 0.11: is a login saved on this phone? (then the page connects by itself) */
+function haveLogin() { const s = loadSettings(); return !!(s.host && s.user && s.pass); }
 function fillForm(s) {
   $("fHost").value = s.host; $("fPort").value = s.port; $("fPath").value = s.path;
   $("fUser").value = s.user; $("fPass").value = s.pass; $("fRobot").value = s.robot;
-  $("fWatch").checked = !!s.watch;
 }
 function readForm() {
   return { host: $("fHost").value.trim().replace(/^[a-z]+:\/\//i, "").replace(/[:/].*$/, ""),
            port: parseInt($("fPort").value, 10) || DEFAULTS.port,
            path: "/" + $("fPath").value.trim().replace(/^\/+/, ""),
-           user: $("fUser").value.trim(), pass: $("fPass").value, robot: $("fRobot").value.trim() || DEFAULTS.robot,
-           watch: $("fWatch").checked };
+           user: $("fUser").value.trim(), pass: $("fPass").value, robot: $("fRobot").value.trim() || DEFAULTS.robot };
 }
 fillForm(loadSettings());
 $("fShow").addEventListener("change", e => { $("fPass").type = e.target.checked ? "text" : "password"; });
@@ -551,13 +619,10 @@ function connectLink(ev) {
 
   videoReset("a new connection");                 // REV 0.7
   link.T = topics(s.robot); link.robot = s.robot;
-  link.watch = !!s.watch; link.operatorStatus = "?";
-  $("pillOperator").hidden = !link.watch;
-  if (link.watch && drive.armed) setArmed(false, "Watch only was switched on");
-  link.connected = false; link.everConnected = false; link.announced = false; link.refused = false;
+  if (drive.armed) setArmed(false, "the link was restarted");
+  link.connected = false; link.everConnected = false; link.online = false; link.refused = false;
   link.robotStatus = "?"; link.robotState = {}; link.stateRx = 0;
   link.pingSent.clear(); link.rtts = [];
-  $("otherOp").hidden = true;
 
   // Secure WebSocket (wss). Plain ws is only used for a broker on this same computer (testing).
   const local = s.host === "localhost" || s.host.startsWith("127.");
@@ -566,34 +631,30 @@ function connectLink(ev) {
   setPill("pillBroker", "warn", "EMQX: connecting…");
 
   const options = {
-    clientId: `${link.watch ? "watch" : "op"}-web-${s.robot}-${SID}`,
+    clientId: `op-web-${s.robot}-${SID}`,
     username: s.user, password: s.pass,
     protocolVersion: 5, clean: true, keepalive: 10,
     reconnectPeriod: 2000, connectTimeout: 10000,
   };
-  // An operator leaves a "Last Will": if this page vanishes (tab closed, Wi-Fi lost) the broker
-  // publishes "offline" for us. A watcher is not an operator, so it leaves no will.
-  if (!link.watch) options.will = { topic: link.T.op_status, payload: "offline", qos: 1, retain: true };
+  // A "Last Will": if this page vanishes (tab closed, Wi-Fi lost) while driving, the broker
+  // publishes "operator offline" for us, and the robot stops waiting for commands.
+  options.will = { topic: link.T.op_status, payload: "offline", qos: 1, retain: true };
   const client = mqtt.connect(url, options);
   link.client = client;
   $("btnDisconnect").disabled = false;
 
   client.on("connect", () => {
     if (client !== link.client) return;
-    link.connected = true; link.everConnected = true; link.announced = false;
-    say("ok", link.watch ? "Connected to EMQX — WATCH ONLY (this page is not driving)." : "Connected to EMQX.");
+    link.connected = true; link.everConnected = true;
+    say("ok", "Connected to EMQX. Tap START DRIVING to drive.");
     setPill("pillBroker", "ok", "EMQX: connected");
     $("btnPing").disabled = false;
     $("settingsBox").open = false;
-    client.subscribe({ [link.T.state]: { qos: 0 }, [link.T.status]: { qos: 1 },
-                       [link.T.pong]: { qos: 0 }, [link.T.op_status]: { qos: 1 } });
+    client.subscribe({ [link.T.state]: { qos: 0 }, [link.T.status]: { qos: 1 }, [link.T.pong]: { qos: 0 } });
     videoOnConnect(client);                       // REV 0.7: the 2 video topics
-    // Listen first (is another operator already online?), THEN say that we are online.
-    setTimeout(() => {
-      if (client !== link.client || !link.connected || link.watch) return;   // a watcher never says "operator online"
-      client.publish(link.T.op_status, "online", { qos: 1, retain: true });
-      link.announced = true;
-    }, 700);
+    // REV 0.11: connecting says NOTHING to the robot. "operator online" is sent by START DRIVING.
+    // After a reconnect while driving, say it again (EMQX may have published our Last Will).
+    if (drive.armed) { client.publish(link.T.op_status, "online", { qos: 1, retain: true }); link.online = true; }
   });
 
   client.on("message", (topic, payload) => {
@@ -609,13 +670,6 @@ function connectLink(ev) {
       try { link.robotState = JSON.parse(text); link.stateRx = performance.now(); } catch (e) {}
     } else if (topic === link.T.status) {
       link.robotStatus = text;
-    } else if (topic === link.T.op_status) {
-      if (link.watch) {                       // watching: just show whether an operator is there
-        link.operatorStatus = text;
-        setPill("pillOperator", text === "online" ? "ok" : "warn", `Operator: ${text}`);
-      } else if (!link.announced && text === "online") {
-        $("otherOp").hidden = false;          // someone else was here first
-      }
     }
   });
 
@@ -653,13 +707,12 @@ function disconnectLink() {
   videoReset("you disconnected");                 // REV 0.7
   link.client = null; link.connected = false;
   const done = () => { try { client.end(); } catch (e) {} };
-  try { (client.connected && !link.watch) ? client.publish(link.T.op_status, "offline", { qos: 1, retain: true }, done) : done(); }
+  try { (client.connected && link.online) ? client.publish(link.T.op_status, "offline", { qos: 1, retain: true }, done) : done(); }
   catch (e) { done(); }
-  $("pillOperator").hidden = true;
+  link.online = false;
   setPill("pillBroker", "warn", "EMQX: not connected");
   setPill("pillRobot", "warn", "Robot: ?");
   $("btnDisconnect").disabled = true; $("btnPing").disabled = true; $("settingsBox").open = true;
-  $("otherOp").hidden = true;
   say("ok", "Disconnected.");
 }
 
@@ -670,7 +723,7 @@ $("btnDisconnect").addEventListener("click", disconnectLink);
 // Leaving the page: say "offline" ourselves (the Last Will is the backup).
 window.addEventListener("pagehide", () => {
   if (link.client && link.client.connected) {
-    try { if (!link.watch) link.client.publish(link.T.op_status, "offline", { qos: 1, retain: true }); link.client.end(); } catch (e) {}
+    try { if (link.online) link.client.publish(link.T.op_status, "offline", { qos: 1, retain: true }); link.client.end(); } catch (e) {}
   }
 });
 
@@ -791,11 +844,14 @@ setInterval(driveTick, 20);
 
 /* Driving ON / OFF */
 function setArmed(on, why) {
-  if (on && (!link.client || !link.connected || link.watch)) return;   // a watcher never drives
+  if (on && (!link.client || !link.connected)) return;
   const was = drive.armed;
   drive.armed = on;
   if (on) {
-    drive.nextT = performance.now();
+    // REV 0.11: NOW tell the robot "operator online" (retained), then start the commands a moment later,
+    // so the robot hears "online" first. Its LED stops blinking white.
+    if (!link.online) { link.client.publish(link.T.op_status, "online", { qos: 1, retain: true }); noteSent(); link.online = true; }
+    drive.nextT = performance.now() + 150;
     if ("wakeLock" in navigator) navigator.wakeLock.request("screen").then(w => { drive.wake = w; }).catch(() => {});
   } else {
     if (was && link.client && link.connected) {               // say STOP three times, like shutdown() in Python
@@ -803,6 +859,13 @@ function setArmed(on, why) {
       setTimeout(() => { if (!drive.armed && link.client && link.connected) sendVel(ZERO); }, PERIOD_MS);
       setTimeout(() => { if (!drive.armed && link.client && link.connected) sendVel(ZERO); }, 2 * PERIOD_MS);
     }
+    // REV 0.11: after the 3 STOPs, tell the robot "operator offline" (its LED blinks white = waiting)
+    setTimeout(() => {
+      if (!drive.armed && link.online && link.client && link.connected) {
+        link.client.publish(link.T.op_status, "offline", { qos: 1, retain: true }); noteSent();
+      }
+      if (!drive.armed) link.online = false;
+    }, 3 * PERIOD_MS);
     drive.last = { v: 0, vy: 0, w: 0 };
     if (drive.wake) { try { drive.wake.release(); } catch (e) {} drive.wake = null; }
   }
@@ -1121,7 +1184,7 @@ function renderVideo() {
   const msg = $("vMsg");
   let text = "", tap = false;
   if (!vid.on) text = "Video is OFF. Tick “Show the robot's camera” (hold the phone upright).";
-  else if (!linked) text = "Connect to EMQX first: section 2 (hold the phone upright).";
+  else if (!linked) text = haveLogin() ? "Connecting to EMQX…" : "First time: tap ⚙ (code 1956) and type the EMQX login once.";
   else if (vid.takenOver) { text = "Another device is watching the robot's camera. Tap here to take the picture back."; tap = true; }
   else if (vid.camState === "offline") text = "The tablet's camera is off: switch VIDEO TO PHONE ON in the tablet app.";
   else if (vid.camState !== "ready") text = "Waiting for the tablet… (tablet app final1 REV 2.23, VIDEO TO PHONE ON)";
@@ -1138,11 +1201,8 @@ function renderVideo() {
   else {
     strip = fresh ? `${s.state ?? "?"} · LED ${s.led ?? "?"} · lat ${s.latency_ms ?? "-"} ms · wd ${s.watchdog_trips ?? "?"}`
                   : "robot: no fresh report";
-    if (link.watch) strip += ` · operator ${link.operatorStatus}`;
-    else {
-      const tc = typeof touchCommand === "function" ? touchCommand() : null;
-      strip += drive.armed ? ` · YOU: ${tc && !tc.name.startsWith("STOP") ? tc.name : "STOP"} ${pct(SPEED_LEVELS[speedI])}` : " · driving OFF";
-    }
+    const tc = typeof touchCommand === "function" ? touchCommand() : null;
+    strip += drive.armed ? ` · YOU: ${tc && !tc.name.startsWith("STOP") ? tc.name : "STOP"} ${pct(SPEED_LEVELS[speedI])}` : " · driving OFF";
     if (drive.estopNote && drive.estopNote.startsWith("E-STOP")) strip = "E-STOP SENT · " + strip;
   }
   $("vStrip").textContent = strip;
@@ -1179,8 +1239,8 @@ function inkFor(hex) {                // black or white letters, whichever is ea
   const v = parseInt(hex.slice(1), 16), r = v >> 16, g = (v >> 8) & 255, b = v & 255;
   return (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? "#111" : "#fff";
 }
-function renderLed() {
-  const el = $("vLed");
+/* What the robot's LED shows right now: background, words, blink (used by the bar and the R LED) */
+function ledLook() {
   const fresh = link.client && link.connected && link.stateRx && performance.now() - link.stateRx < 1500;
   const word = fresh ? String(link.robotState.led ?? "") : "";
   let bg = "#303030", text = "ROBOT LED: no report from the robot", blink = "";
@@ -1195,6 +1255,11 @@ function renderLed() {
     else if (LED_HEX[first])                 { bg = LED_HEX[first]; text = `${first} = ${LED_MEANS[first] || ""}`; }
     else text = `ROBOT LED: ${word}`;
   }
+  return { bg, text, blink, fresh: !!word };
+}
+function renderLed() {
+  const el = $("vLed");
+  const { bg, text, blink } = ledLook();
   el.style.background = bg;
   el.style.color = bg.startsWith("#") ? inkFor(bg) : "#111";
   el.className = "vled" + (blink ? " " + blink : "");
@@ -1215,7 +1280,7 @@ renderLed();
      * the robot moves only while a finger is ON the joystick or a ROTATE button
      * finger lifted, interrupted (call, notification) or the page hidden = STOP
      * joystick + ROTATE at the same time = STOP (one thing at a time)
-     * Watch only (the pocket remote drives) = the touch controls are hidden
+     * (REV 0.11: Watch only was removed - the phone is the only driver)
      * phone turned sideways = the touch controls are hidden (portrait only)
    ======================================================================= */
 const touch = { pos: null, pid: null, rot: null, rotPid: null };
@@ -1295,15 +1360,14 @@ $("tReset").addEventListener("click", () => estop(false, "touch Reset"));
 /* ---- draw the touch panel (4 times a second) ---- */
 function renderTouch() {
   const linked = !!(link.client && link.connected);
-  const watch = linked && link.watch;
-  const panelShown = !watch;
-  $("tControls").hidden = watch;
-  document.body.classList.toggle("tpad-on", panelShown);
-  if (watch && (touch.pos !== null || touch.rot !== null)) touchReleaseAll();
+  document.body.classList.add("tpad-on");
+  document.body.classList.toggle("armed", drive.armed);
+  if (!drive.armed && document.body.classList.contains("simple") && (touch.pos !== null || touch.rot !== null)) touchReleaseAll();
   const tArm = $("tArm");
-  tArm.disabled = !linked || watch;
-  tArm.textContent = drive.armed ? "Disable driving" : "Enable driving";
-  tArm.classList.toggle("primary", !drive.armed);
+  tArm.disabled = !linked;
+  tArm.textContent = drive.armed ? "STOP DRIVING" : "START DRIVING";
+  tArm.classList.toggle("go", !drive.armed);
+  tArm.classList.toggle("stopdrv", drive.armed);
   $("tStop").disabled = $("tReset").disabled = !linked;
   [...$("tSpeed").children].forEach((b, i) => b.classList.toggle("on", i === speedI));
   $("tPad").classList.toggle("off", !drive.armed);
@@ -1313,15 +1377,82 @@ function renderTouch() {
   tm.className = "tmotion mono" + (c && !c.name.startsWith("STOP") ? " go" : "");
   const note = $("tNote");
   let text = "";
-  if (!linked) text = "Connect to EMQX first (section 2).";
-  else if (watch) text = "WATCH ONLY: the pocket remote drives. The touch joystick is hidden. To drive from this phone, untick “Watch only” in Settings and connect again. STOP ALL on the video still works.";
+  if (!linked) text = haveLogin() ? (link.refused ? "EMQX refused the login: tap ⚙ to check it." : "Connecting to EMQX…")
+                                   : "First time: tap ⚙ (code 1956), type the EMQX login, tick “remember”, press Connect.";
   else if (drive.estopNote && drive.estopNote.startsWith("E-STOP")) text = "E-STOP is ON: press Reset e-stop, then let go of everything, to drive again.";
   else if (!drive.armed && drive.offWhy && performance.now() - drive.offAt < 8000) text = drive.offWhy;
-  else if (!drive.armed) text = "Driving is OFF. Tap “Enable driving” to use the joystick (the robot only moves while your finger is on it).";
+  else if (!drive.armed && !document.body.classList.contains("simple")) text = "Driving is OFF. Tap START DRIVING to use the joystick (the robot only moves while your finger is on it).";
   note.hidden = !text; note.textContent = text;
 }
 setInterval(renderTouch, 250);
 renderTouch();
+
+/* =======================================================================
+   REV 0.11 - THE 4 LEDs, THE EXPERT SCREEN (code) AND THE AUTOMATIC CONNECTION
+   ======================================================================= */
+const EXPERT_CODE = "1956";            // a CHILD LOCK, not security: this page is public on GitHub
+const UNLOCK_KEY = "rob2.expert.ok";   // remembered for this visit only (cleared when the page/tab is closed)
+
+
+/* ---- the 4 LEDs ---- */
+function setLed(id, cls, blink) { const el = $(id); el.className = (cls || "off") + (blink ? " " + blink : ""); el.style.background = ""; el.style.boxShadow = ""; }
+function renderLeds() {
+  const t = performance.now();
+  // N = network
+  if (link.client && link.connected) setLed("ledN", "g");
+  else if (link.refused || (link.client && !link.everConnected && link.triedAt && t - link.triedAt > 8000) || !haveLogin()) setLed("ledN", "r");
+  else setLed("ledN", "a", "blink-slow");
+  // V = video
+  const live = !!(vid.pc && vid.pc.connectionState === "connected" && vid.firstFrame);
+  const frozen = live && !document.hidden && t - vid.lastFrameAt > V_FROZEN_MS;
+  if (!vid.on) setLed("ledV", "off");
+  else if (frozen) setLed("ledV", "r", "blink-fast");
+  else if (live) setLed("ledV", "g");
+  else setLed("ledV", (link.client && link.connected) ? "a" : "off");
+  // R = the robot's own LED colour (same colours as the tablet and the ESP32)
+  const look = ledLook(), r = $("ledR");
+  r.className = look.blink || "";
+  if (look.fresh) { r.style.background = look.bg; r.style.boxShadow = look.bg.startsWith("#") ? `0 0 8px ${look.bg}` : "none"; }
+  else { r.className = "off"; r.style.background = ""; r.style.boxShadow = ""; }
+  r.parentElement.title = "R = robot LED: " + look.text;
+  // D = driving
+  if (drive.estopNote && drive.estopNote.startsWith("E-STOP")) setLed("ledD", "r");
+  else if (drive.armed) setLed("ledD", "g");
+  else setLed("ledD", "off");
+}
+setInterval(renderLeds, 200);
+
+/* ---- simple screen <-> expert screen ---- */
+function unlocked() { try { return sessionStorage.getItem(UNLOCK_KEY) === "1"; } catch (e) { return false; } }
+function showExpert(on) {
+  document.body.classList.toggle("simple", !on);
+  window.scrollTo(0, 0);
+}
+$("btnGear").addEventListener("click", () => {
+  if (unlocked()) { showExpert(true); return; }
+  $("lockCode").value = ""; $("lockMsg").textContent = ""; $("lockBox").hidden = false;
+  setTimeout(() => $("lockCode").focus(), 50);
+});
+function tryCode() {
+  if ($("lockCode").value.trim() === EXPERT_CODE) {
+    try { sessionStorage.setItem(UNLOCK_KEY, "1"); } catch (e) {}
+    $("lockBox").hidden = true; showExpert(true);
+  } else { $("lockMsg").textContent = "Wrong code."; $("lockCode").value = ""; }
+}
+$("lockOk").addEventListener("click", tryCode);
+$("lockCode").addEventListener("keydown", e => { if (e.key === "Enter") tryCode(); });
+$("lockCancel").addEventListener("click", () => { $("lockBox").hidden = true; });
+$("btnSimple").addEventListener("click", () => showExpert(false));
+
+/* ---- connect by itself, with the login saved on this phone ---- */
+const _connectLink = connectLink;
+function autoConnect() {
+  if (link.client) return;                         // already connected (or connecting)
+  if (!haveLogin()) return;                        // first time: the login is typed on the expert screen
+  link.triedAt = performance.now();
+  _connectLink();
+}
+setTimeout(autoConnect, 300);
 </script>
 </body>
 </html>
