@@ -2,6 +2,26 @@
 <!--
   Rob2 Operator - universal browser controller for Rob2
   =====================================================
+  REV 1.3  (2026-10-14)  - CLOCK-FREE LATENCY for the tablet (tablet app final1 REV 2.27)
+      * The page now sends a PING by itself every 2 seconds while it is connected (it was only the
+        PING button before). The ping goes page -> EMQX -> tablet -> USB -> ESP32 and the pong comes
+        all the way back. The page times the ROUND TRIP with its own stopwatch: no clock to agree on.
+      * Each ping carries the median of the last 10 round trips ("rtt", in ms). The tablet shows half
+        of it as LATENCY (phone -> ESP32, one way). Before, the tablet compared the phone's clock with
+        its own, and a phone clock 0.1 s off gave a number 0.1 s wrong.
+      * Cost: 1 message every 2 seconds (the limit is 10 a second; driving uses 8). Skipped when busy
+        or when the page is hidden.
+      * Older tablet apps simply pass the extra "rtt" on: nothing breaks.
+  REV 1.2  (2026-10-10)  - VIDEO FROM ANYWHERE TO ANYWHERE (free Cloudflare relay)
+      * Needs the tablet app final1 REV 2.24 with its Cloudflare key typed in.
+      * The tablet sends a 24-HOUR relay pass inside its video "offer". This page adds it to its end
+        of the link. The secret key itself never comes to the phone (this page is public).
+      * The video still tries the DIRECT way first (about 0.09 s at home). Only when that is blocked
+        (mobile data, hotel / school / office Wi-Fi...) does it go through Cloudflare's relay.
+      * "RELAY" appears on the video badge when the relay is in use:  ● LIVE 30 fps · 0.10 s · RELAY
+      * Expert screen: new test switch "Force relay" (under the video). ON = relay ONLY, never direct,
+        so you can test the relay at home. It is NOT remembered: every new visit starts with it OFF.
+      * Older tablet app (no pass) = direct only, exactly like REV 1.1.
   REV 1.1  (2026-10-09)  - UPRIGHT ONLY (no sideways operation)
       * Upright is the only way to see the VIDEO and the JOYSTICK at the same time, so:
         phone turned sideways = a black screen "Turn the phone upright". The joystick is released
@@ -330,7 +350,7 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
 
 <header>
   <h1>Rob2 Operator</h1>
-  <span class="rev">REV 1.1 · expert screen</span>
+  <span class="rev">REV 1.3 · expert screen</span>
   <button id="btnSimple" type="button">◀ Simple screen</button>
   <span class="step">Motion commands are sent only while "Driving" is ON</span>
 </header>
@@ -343,7 +363,7 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
     <div class="vwrap" id="vwrap">
       <video id="vid" autoplay muted playsinline></video>
       <div class="vbadge" id="vBadge">VIDEO OFF</div>
-      <div class="vrev" id="vRev">REV 1.1</div>
+      <div class="vrev" id="vRev">REV 1.3</div>
       <div class="vfrozen" id="vFrozen" hidden>VIDEO FROZEN<small>no new picture for over 1 s — do not drive by this picture</small></div>
       <button class="vmsg" id="vMsg" type="button" disabled>…</button>
       <button class="vstop" id="vStop" type="button" disabled>STOP ALL</button>
@@ -394,6 +414,10 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
         <label><input type="checkbox" id="vOn"> Show the robot's camera</label>
         <span class="pill warn" id="pillVideo">Video: off</span>
       </div>
+      <!-- REV 1.2: test the relay at home (not remembered: OFF at every new visit) -->
+      <div class="row">
+        <label><input type="checkbox" id="vRelay"> Force relay (test: video ONLY through the Cloudflare relay)</label>
+      </div>
       <div class="mono small" id="vNums"></div>
       <p class="small">The tablet app must have <b>VIDEO TO PHONE</b> switched ON. Upright only: sideways shows "turn the phone upright".</p>
     </div>
@@ -442,7 +466,7 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
     <div class="info mono" id="robotInfo"></div>
     <div class="row">
       <button id="btnPing" type="button" disabled>PING</button>
-      <span class="mono" id="pingLine">press PING to measure page → EMQX → tablet → USB → ESP32 → back</span>
+      <span class="mono" id="pingLine">measuring page → EMQX → tablet → USB → ESP32 → back (a ping every 2 s)…</span>
     </div>
   </section>
 
@@ -671,7 +695,10 @@ function connectLink(ev) {
     if (topic === link.T.pong) {
       try {
         const id = JSON.parse(text).id, t0 = link.pingSent.get(id);
-        if (t0 !== undefined) { link.pingSent.delete(id); link.rtts.push(performance.now() - t0); }
+        if (t0 !== undefined) {
+          link.pingSent.delete(id); link.rtts.push(performance.now() - t0);
+          if (link.rtts.length > 200) link.rtts.shift();             // REV 1.3: keep the last 200 only
+        }
       } catch (e) {}
     } else if (topic === link.T.state) {
       try { link.robotState = JSON.parse(text); link.stateRx = performance.now(); } catch (e) {}
@@ -743,14 +770,34 @@ function ping() {
   noteSent();
   link.pingId++;
   link.pingSent.set(link.pingId, performance.now());
-  link.client.publish(link.T.ping, JSON.stringify({ id: link.pingId, sid: SID }), { qos: 0 });
+  // REV 1.3: tell the tablet our recent round trip (median of the last 10, in ms): its LATENCY = half of it
+  const msg = { id: link.pingId, sid: SID };
+  const med = recentRtt();
+  if (med !== undefined) msg.rtt = Math.round(med);
+  link.client.publish(link.T.ping, JSON.stringify(msg), { qos: 0 });
 }
 $("btnPing").addEventListener("click", ping);
+
+/* REV 1.3: the median of the last 10 round trips (the middle value: one slow ping does not change it) */
+function recentRtt() {
+  const last = link.rtts.slice(-10);
+  if (!last.length) return undefined;
+  const s = last.sort((a, b) => a - b);
+  return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
+}
+/* REV 1.3: PING BY ITSELF every 2 seconds (not while the page is hidden) */
+const AUTO_PING_MS = 2000;
+setInterval(() => {
+  if (document.hidden) return;
+  const now = performance.now();
+  link.pingSent.forEach((t, id) => { if (now - t > 10000) link.pingSent.delete(id); });   // forget pings lost > 10 s ago
+  ping();
+}, AUTO_PING_MS);
 
 function pingLine() {                       // same numbers as ping_line() in robot_operator.py
   const r = link.rtts, now = performance.now();
   let lost = 0; link.pingSent.forEach(t => { if (now - t > 2000) lost++; });
-  if (!r.length) return "press PING to measure page → EMQX → tablet → USB → ESP32 → back" + (lost ? `   (lost ${lost})` : "");
+  if (!r.length) return "measuring page → EMQX → tablet → USB → ESP32 → back (a ping every 2 s)…" + (lost ? `   (lost ${lost})` : "");
   const s = r.slice().sort((a, b) => a - b), mean = r.reduce((a, b) => a + b, 0) / r.length;
   const p95 = s[Math.max(0, Math.min(s.length - 1, Math.round(0.95 * s.length) - 1))];
   const jit = r.length > 1 ? Math.sqrt(r.reduce((a, b) => a + (b - mean) ** 2, 0) / r.length) : 0;
@@ -925,6 +972,7 @@ window.addEventListener("pagehide", () => { if (drive.armed && link.client && li
 const VIDEO_KEY      = "rob2.opvideo.v1";       // "show the robot's camera" ON/OFF, remembered on this device
 const V_RTC          = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 const V_GATHER_MS    = 1500;     // wait at most this long for the list of our addresses
+const V_GATHER_RELAY_MS = 2500;  // REV 1.2: with a relay pass, relay addresses take a little longer
 const V_HELLO_GAP    = 3000;     // ask the tablet again after this long (doubles up to 15 s)
 const V_HELLO_MAX    = 15000;
 const V_FROZEN_MS    = 1000;     // no new picture for this long = "VIDEO FROZEN"
@@ -943,6 +991,8 @@ const vid = {
   badSince: 0, firstFrame: false, lastFrameAt: 0,
   mine: {}, far: {}, farAt: 0,  // our numbers, and the tablet's numbers (they come on the side channel)
   prev: {}, prevAt: 0, lossRing: [], wake: null,
+  forceRelay: false,            // REV 1.2: "Force relay" test switch (expert screen, not remembered)
+  noPass: false,                // REV 1.2: relay forced, but the tablet sent no relay pass
 };
 $("vOn").checked = vid.on;
 
@@ -999,13 +1049,14 @@ function videoCameraState(m) {
 function videoHello() {
   if (vid.awaitingOffer) vid.helloGap = Math.min(vid.helloGap * 2, V_HELLO_MAX);    // no answer last time: wait longer
   vid.attempt++; vid.helloAt = performance.now(); vid.awaitingOffer = true; vid.helloSent = true; vid.firstFrame = false;
-  videoSend(vid.T.hello, { viewer: SID, n: vid.attempt });
+  // REV 1.2: "relay": true = please use the relay ONLY (the tablet ignores it if it has no pass)
+  videoSend(vid.T.hello, vid.forceRelay ? { viewer: SID, n: vid.attempt, relay: true } : { viewer: SID, n: vid.attempt });
 }
 
-function videoGathered(p) {                      // wait until our address list is complete (max 1.5 s)
+function videoGathered(p, ms) {                  // wait until our address list is complete (max 1.5 s, 2.5 s with a relay)
   if (p.iceGatheringState === "complete") return Promise.resolve();
   return new Promise(resolve => {
-    const timer = setTimeout(done, V_GATHER_MS);
+    const timer = setTimeout(done, ms);
     function done() { clearTimeout(timer); p.removeEventListener("icegatheringstatechange", check); resolve(); }
     function check() { if (p.iceGatheringState === "complete") done(); }
     p.addEventListener("icegatheringstatechange", check);
@@ -1017,7 +1068,17 @@ async function videoOffer(m) {
   if (!vid.on || !link.connected) return;
   if (m.to !== SID || m.n !== vid.attempt || vid.pc || vid.takenOver) return;   // for another device, old, or a copy
   vid.awaitingOffer = false;
-  const p = new RTCPeerConnection(V_RTC); vid.pc = p; vid.badSince = performance.now();
+  // REV 1.2: the tablet's 24-hour relay pass ("ice"), if it sent one
+  const pass = videoPass(m.ice);
+  vid.noPass = vid.forceRelay && !pass.length;
+  if (vid.noPass) {                                // relay only + no relay = no video
+    vid.lastWhy = "Force relay is ON, but the tablet sent no relay pass";
+    vid.awaitingOffer = true;                      // = ask again later and later (up to every 15 s), not every 3 s
+    return;
+  }
+  const cfg = { iceServers: V_RTC.iceServers.concat(pass) };
+  if (vid.forceRelay) cfg.iceTransportPolicy = "relay";
+  const p = new RTCPeerConnection(cfg); vid.pc = p; vid.badSince = performance.now();
   p.ondatachannel = e => {
     const ch = e.channel; vid.dc = ch;
     ch.onmessage = ev => { try { vid.far = JSON.parse(ev.data); vid.farAt = performance.now(); } catch (err) {} };
@@ -1034,10 +1095,27 @@ async function videoOffer(m) {
   try {
     await p.setRemoteDescription({ type: "offer", sdp: m.sdp });
     await p.setLocalDescription(await p.createAnswer());
-    await videoGathered(p);
+    await videoGathered(p, pass.length ? V_GATHER_RELAY_MS : V_GATHER_MS);
     if (vid.pc !== p) return;
     videoSend(vid.T.answer, { from: SID, n: m.n, sdp: p.localDescription.sdp });
   } catch (e) { if (vid.pc === p) videoDrop("could not answer: " + e.message); }
+}
+
+/* REV 1.2: check the relay pass from the tablet: a list of { urls, username, credential }.
+   Anything strange is left out (a bad pass must never stop the direct video). */
+function videoPass(ice) {
+  if (!Array.isArray(ice)) return [];
+  const out = [];
+  for (const s of ice) {
+    if (!s || typeof s !== "object") continue;
+    const urls = (Array.isArray(s.urls) ? s.urls : [s.urls]).filter(u => typeof u === "string" && /^(stun|turns?):/.test(u));
+    if (!urls.length) continue;
+    const e = { urls };
+    if (typeof s.username === "string") e.username = s.username;
+    if (typeof s.credential === "string") e.credential = s.credential;
+    out.push(e);
+  }
+  return out.some(e => e.urls.some(u => u.startsWith("turn"))) ? out : [];    // no relay address = no pass
 }
 
 /* ---- close the direct link (EMQX stays connected) ---- */
@@ -1075,6 +1153,13 @@ $("vOn").addEventListener("change", e => {
   try { localStorage.setItem(VIDEO_KEY, JSON.stringify({ on: vid.on })); } catch (err) {}
   if (!vid.on) videoDrop("video switched off");
   else { vid.helloAt = -1e9; vid.helloGap = V_HELLO_GAP; vid.awaitingOffer = false; }
+});
+/* REV 1.2: "Force relay" test switch: start the link again, the new way */
+$("vRelay").checked = false;
+$("vRelay").addEventListener("change", e => {
+  vid.forceRelay = e.target.checked; vid.noPass = false;
+  videoDrop(vid.forceRelay ? "Force relay switched ON" : "Force relay switched OFF");
+  vid.helloAt = -1e9; vid.helloGap = V_HELLO_GAP; vid.awaitingOffer = false;
 });
 $("vMsg").addEventListener("click", () => {      // "take the picture back" from another device
   if (!vid.takenOver) return;
@@ -1182,7 +1267,8 @@ function renderVideo() {
   else if (frozen) { badge.className = "vbadge bad"; badge.textContent = `● FROZEN ${((t - vid.lastFrameAt) / 1000).toFixed(1)} s`; }
   else if (live) {
     badge.className = "vbadge " + (d === undefined || d < V_DELAY_WARN ? "ok" : d < V_DELAY_BAD ? "warn" : "bad");
-    badge.textContent = `● LIVE ${n0(vid.mine.fps)} fps · ${d === undefined ? "–" : d.toFixed(2) + " s"}`;
+    const relay = typeof vid.mine.path === "string" && vid.mine.path.startsWith("through a relay");     // REV 1.2
+    badge.textContent = `● LIVE ${n0(vid.mine.fps)} fps · ${d === undefined ? "–" : d.toFixed(2) + " s"}${relay ? " · RELAY" : ""}`;
   } else if (vid.takenOver) { badge.className = "vbadge warn"; badge.textContent = "● another device is watching"; }
   else { badge.className = "vbadge warn"; badge.textContent = linked ? "● connecting…" : "● no link"; }
   $("vFrozen").hidden = !frozen;
@@ -1192,6 +1278,7 @@ function renderVideo() {
   let text = "", tap = false;
   if (!vid.on) text = "Video is OFF. Tick “Show the robot's camera” (hold the phone upright).";
   else if (!linked) text = haveLogin() ? "Connecting to EMQX…" : "First time: tap ⚙ (code 1956) and type the EMQX login once.";
+  else if (vid.noPass && !live) text = "Force relay is ON, but the tablet sent no relay pass: needs tablet app REV 2.24 with the Cloudflare key (or switch Force relay OFF).";
   else if (vid.takenOver) { text = "Another device is watching the robot's camera. Tap here to take the picture back."; tap = true; }
   else if (vid.camState === "offline") text = "The tablet's camera is off: switch VIDEO TO PHONE ON in the tablet app.";
   else if (vid.camState !== "ready") text = "Waiting for the tablet… (tablet app final1 REV 2.23, VIDEO TO PHONE ON)";
