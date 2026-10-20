@@ -2,6 +2,9 @@
 <!--
   Rob2 Operator - universal browser controller for Rob2
   =====================================================
+  REV 1.5  (2026-10-19)  - texts only: the relay now comes with tablet app REV 3.2
+      * "Force relay is ON, but the tablet sent no relay pass" now says which tablet app is needed:
+        REV 3.2 (with the Cloudflare key). The waiting message says REV 3.2 too. Nothing else changed.
   REV 1.4  (2026-10-19)  - JOYSTICK SPEED FOLLOWS HOW FAR YOU PUSH
       * Before: anywhere outside the dashed circle = the full speed of the button.
         Now: the further the knob is from the centre, the faster the robot goes.
@@ -362,7 +365,7 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
 
 <header>
   <h1>Rob2 Operator</h1>
-  <span class="rev">REV 1.4 · expert screen</span>
+  <span class="rev">REV 1.5 · expert screen</span>
   <button id="btnSimple" type="button">◀ Simple screen</button>
   <span class="step">Motion commands are sent only while "Driving" is ON</span>
 </header>
@@ -375,7 +378,7 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
     <div class="vwrap" id="vwrap">
       <video id="vid" autoplay muted playsinline></video>
       <div class="vbadge" id="vBadge">VIDEO OFF</div>
-      <div class="vrev" id="vRev">REV 1.4</div>
+      <div class="vrev" id="vRev">REV 1.5</div>
       <div class="vfrozen" id="vFrozen" hidden>VIDEO FROZEN<small>no new picture for over 1 s — do not drive by this picture</small></div>
       <button class="vmsg" id="vMsg" type="button" disabled>…</button>
       <button class="vstop" id="vStop" type="button" disabled>STOP ALL</button>
@@ -1298,10 +1301,10 @@ function renderVideo() {
   let text = "", tap = false;
   if (!vid.on) text = "Video is OFF. Tick “Show the robot's camera” (hold the phone upright).";
   else if (!linked) text = haveLogin() ? "Connecting to EMQX…" : "First time: tap ⚙ (code 1956) and type the EMQX login once.";
-  else if (vid.noPass && !live) text = "Force relay is ON, but the tablet sent no relay pass: needs tablet app REV 2.24 with the Cloudflare key (or switch Force relay OFF).";
+  else if (vid.noPass && !live) text = "Force relay is ON, but the tablet sent no relay pass: needs tablet app REV 3.2 with the Cloudflare key typed in (or switch Force relay OFF).";
   else if (vid.takenOver) { text = "Another device is watching the robot's camera. Tap here to take the picture back."; tap = true; }
   else if (vid.camState === "offline") text = "The tablet's camera is off: switch VIDEO TO PHONE ON in the tablet app.";
-  else if (vid.camState !== "ready") text = "Waiting for the tablet… (tablet app final1 REV 2.23, VIDEO TO PHONE ON)";
+  else if (vid.camState !== "ready") text = "Waiting for the tablet… (tablet app final1 REV 3.2, VIDEO TO PHONE ON)";
   else if (!live) text = "Connecting to the robot's camera…";
   msg.hidden = !text; msg.textContent = text; msg.disabled = !tap;
 
