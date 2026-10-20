@@ -2,6 +2,16 @@
 <!--
   Rob2 Operator - universal browser controller for Rob2
   =====================================================
+  REV 1.8  (2026-10-19)  - DIRECT FIRST, CLOUDFLARE ONLY IF DIRECT FAILS (tablet app REV 3.3)
+      * Problem in 1.7 + tablet 3.2: at home the video sometimes took the Cloudflare relay although
+        the direct way works (the relay answered first). Now:
+          try 1  the page asks for video WITHOUT the relay (the tablet offers no Cloudflare address):
+                 at home and on most mobile networks this connects directly (about 0.09 s)
+          try 2  only if try 1 has not connected after 4 seconds: the page asks again WITH the relay
+      * "☁ Force relay" still goes straight to Cloudflare (test).
+      * Status: "Video: DIRECT" / "Video: ☁ CLOUDFLARE (direct blocked)" / "Video: ☁ CLOUDFLARE (forced)"
+        / "direct blocked → trying ☁ Cloudflare…".
+      * The relay choice is remembered until the page is closed or the video is switched off/on.
   REV 1.7  (2026-10-19)  - CLOUDFLARE RELAY ON THE SIMPLE SCREEN   (1.6 skipped)
       * Under the joystick, next to ⚙:  "Video: DIRECT"  or  "Video: ☁ CLOUDFLARE"  = how the video
         travels RIGHT NOW (the relay is chosen BY ITSELF when the direct way is blocked).
@@ -377,7 +387,7 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
 
 <header>
   <h1>Rob2 Operator</h1>
-  <span class="rev">REV 1.7 · expert screen</span>
+  <span class="rev">REV 1.8 · expert screen</span>
   <button id="btnSimple" type="button">◀ Simple screen</button>
   <span class="step">Motion commands are sent only while "Driving" is ON</span>
 </header>
@@ -390,7 +400,7 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
     <div class="vwrap" id="vwrap">
       <video id="vid" autoplay muted playsinline></video>
       <div class="vbadge" id="vBadge">VIDEO OFF</div>
-      <div class="vrev" id="vRev">REV 1.7</div>
+      <div class="vrev" id="vRev">REV 1.8</div>
       <div class="vfrozen" id="vFrozen" hidden>VIDEO FROZEN<small>no new picture for over 1 s — do not drive by this picture</small></div>
       <button class="vmsg" id="vMsg" type="button" disabled>…</button>
       <button class="vstop" id="vStop" type="button" disabled>STOP ALL</button>
@@ -1013,6 +1023,7 @@ const VIDEO_KEY      = "rob2.opvideo.v1";       // "show the robot's camera" ON/
 const V_RTC          = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 const V_GATHER_MS    = 1500;     // wait at most this long for the list of our addresses
 const V_GATHER_RELAY_MS = 2500;  // REV 1.2: with a relay pass, relay addresses take a little longer
+const V_DIRECT_WAIT = 4000;      // REV 1.8: try 1 (direct only) has this long to connect, then try 2 (with Cloudflare)
 const V_HELLO_GAP    = 3000;     // ask the tablet again after this long (doubles up to 15 s)
 const V_HELLO_MAX    = 15000;
 const V_FROZEN_MS    = 1000;     // no new picture for this long = "VIDEO FROZEN"
@@ -1032,6 +1043,8 @@ const vid = {
   mine: {}, far: {}, farAt: 0,  // our numbers, and the tablet's numbers (they come on the side channel)
   prev: {}, prevAt: 0, lossRing: [], wake: null,
   forceRelay: false,            // REV 1.2: "Force relay" test switch (expert screen, not remembered)
+  relayStage: 0,                // REV 1.8: 0 = try 1 (direct only), 1 = try 2 (Cloudflare allowed)
+  stageNoPass: false,           // REV 1.8: try 2 but the tablet sent no relay pass
   noPass: false,                // REV 1.2: relay forced, but the tablet sent no relay pass
 };
 $("vOn").checked = vid.on;
@@ -1048,6 +1061,7 @@ function videoOnConnect(client) {
 }
 function videoReset(why) {                       // new connection or Disconnect: start from zero
   videoDrop(why);
+  vid.relayStage = 0; vid.stageNoPass = false;    // REV 1.8: start again with "direct first"
   vid.camState = "?"; vid.camSid = null; vid.helloSent = false; vid.takenOver = false;
   vid.awaitingOffer = false; vid.helloAt = -1e9; vid.helloGap = V_HELLO_GAP;
 }
@@ -1089,8 +1103,13 @@ function videoCameraState(m) {
 function videoHello() {
   if (vid.awaitingOffer) vid.helloGap = Math.min(vid.helloGap * 2, V_HELLO_MAX);    // no answer last time: wait longer
   vid.attempt++; vid.helloAt = performance.now(); vid.awaitingOffer = true; vid.helloSent = true; vid.firstFrame = false;
-  // REV 1.2: "relay": true = please use the relay ONLY (the tablet ignores it if it has no pass)
-  videoSend(vid.T.hello, vid.forceRelay ? { viewer: SID, n: vid.attempt, relay: true } : { viewer: SID, n: vid.attempt });
+  // "relay": true    = please use the relay ONLY (Force relay)        (REV 1.2)
+  //         "allow" = you may add the relay (try 2: direct did not work)  (REV 1.8)
+  //         nothing = direct only (try 1)                                 (REV 1.8, tablet 3.3)
+  const hello = { viewer: SID, n: vid.attempt };
+  if (vid.forceRelay) hello.relay = true;
+  else if (vid.relayStage === 1) hello.relay = "allow";
+  videoSend(vid.T.hello, hello);
 }
 
 function videoGathered(p, ms) {                  // wait until our address list is complete (max 1.5 s, 2.5 s with a relay)
@@ -1109,7 +1128,9 @@ async function videoOffer(m) {
   if (m.to !== SID || m.n !== vid.attempt || vid.pc || vid.takenOver) return;   // for another device, old, or a copy
   vid.awaitingOffer = false;
   // REV 1.2: the tablet's 24-hour relay pass ("ice"), if it sent one
-  const pass = videoPass(m.ice);
+  // REV 1.8: try 1 = direct only: the pass is NOT used even if an older tablet sends one
+  const pass = (vid.forceRelay || vid.relayStage === 1) ? videoPass(m.ice) : [];
+  vid.stageNoPass = !vid.forceRelay && vid.relayStage === 1 && !pass.length;
   vid.noPass = vid.forceRelay && !pass.length;
   if (vid.noPass) {                                // relay only + no relay = no video
     vid.lastWhy = "Force relay is ON, but the tablet sent no relay pass";
@@ -1191,6 +1212,7 @@ vEl.addEventListener("playing", () => {
 $("vOn").addEventListener("change", e => {
   vid.on = e.target.checked;
   try { localStorage.setItem(VIDEO_KEY, JSON.stringify({ on: vid.on })); } catch (err) {}
+  vid.relayStage = 0; vid.stageNoPass = false;    // REV 1.8: direct first again
   if (!vid.on) videoDrop("video switched off");
   else { vid.helloAt = -1e9; vid.helloGap = V_HELLO_GAP; vid.awaitingOffer = false; }
 });
@@ -1203,7 +1225,7 @@ $("btnRelay").addEventListener("click", () => {
   box.dispatchEvent(new Event("change"));
 });
 $("vRelay").addEventListener("change", e => {
-  vid.forceRelay = e.target.checked; vid.noPass = false;
+  vid.forceRelay = e.target.checked; vid.noPass = false; vid.relayStage = 0; vid.stageNoPass = false;   // REV 1.8
   $("btnRelay").setAttribute("aria-pressed", String(vid.forceRelay));
   videoDrop(vid.forceRelay ? "Force relay switched ON" : "Force relay switched OFF");
   vid.helloAt = -1e9; vid.helloGap = V_HELLO_GAP; vid.awaitingOffer = false;
@@ -1225,7 +1247,15 @@ function videoTick() {
     if (st === "connected") vid.badSince = 0;
     else if (st === "failed" || st === "closed") videoDrop("the video link failed");
     else if (st === "disconnected") { if (!vid.badSince) vid.badSince = t; else if (t - vid.badSince > 5000) videoDrop("no video for 5 seconds"); }
-    else { if (!vid.badSince) vid.badSince = t; else if (t - vid.badSince > 15000) videoDrop("the tablet could not be reached in 15 seconds"); }
+    else {
+      if (!vid.badSince) vid.badSince = t;
+      // REV 1.8: try 1 (direct only) did not connect in 4 s → try 2 with Cloudflare, at once
+      else if (!vid.forceRelay && vid.relayStage === 0 && t - vid.badSince > V_DIRECT_WAIT) {
+        videoDrop("direct way blocked: trying through Cloudflare");
+        vid.relayStage = 1; vid.helloAt = -1e9; vid.helloGap = V_HELLO_GAP; vid.awaitingOffer = false;
+      }
+      else if (t - vid.badSince > 15000) videoDrop("the tablet could not be reached in 15 seconds");
+    }
   }
   if (!vid.pc && vid.on && link.client && link.connected && vid.T && !vid.takenOver && vid.camState === "ready"
       && t - vid.helloAt >= vid.helloGap) videoHello();
@@ -1324,9 +1354,11 @@ function renderVideo() {
   const rs = $("relayStat");
   const viaRelay = live && typeof vid.mine.path === "string" && vid.mine.path.startsWith("through a relay");
   if (!vid.on) { rs.className = "relaystat mono"; rs.textContent = "Video: off"; }
-  else if (live && viaRelay) { rs.className = "relaystat mono relay"; rs.textContent = "Video: ☁ CLOUDFLARE"; }
-  else if (live) { rs.className = "relaystat mono direct"; rs.textContent = vid.forceRelay ? "Video: DIRECT (?)" : "Video: DIRECT"; }
-  else if (vid.noPass) { rs.className = "relaystat mono"; rs.textContent = "Video: no relay pass"; }
+  else if (live && viaRelay) { rs.className = "relaystat mono relay"; rs.textContent = vid.forceRelay ? "Video: ☁ CLOUDFLARE (forced)" : "Video: ☁ CLOUDFLARE (direct blocked)"; }
+  else if (live && typeof vid.mine.path !== "string") { rs.className = "relaystat mono"; rs.textContent = "Video: live, checking the path…"; }   // REV 1.8: path known after ~1 s
+  else if (live) { rs.className = "relaystat mono direct"; rs.textContent = "Video: DIRECT"; }
+  else if (vid.noPass || vid.stageNoPass) { rs.className = "relaystat mono"; rs.textContent = "Video: no relay pass"; }
+  else if (vid.relayStage === 1) { rs.className = "relaystat mono"; rs.textContent = "Video: direct blocked → ☁ Cloudflare…"; }
   else { rs.className = "relaystat mono"; rs.textContent = vid.forceRelay ? "Video: ☁ connecting…" : "Video: connecting…"; }
 
   // the message in the middle (only when there is no live picture)
