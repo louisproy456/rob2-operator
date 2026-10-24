@@ -2,6 +2,27 @@
 <!--
   Rob2 Operator - universal browser controller for Rob2
   =====================================================
+  REV 2.4  (2026-10-24)  - TWO-WAY AUDIO (intercom) with tablet app REV 4.4.
+      * New "🎙 Audio" button under the video. OFF by default. Tap = talk to the robot AND hear it.
+      * ON asks the browser for the microphone, sends your voice to the tablet and un-mutes the
+        robot's sound. A small message on  robot/<id>/video/audio  tells the tablet to open its mic.
+      * No reconnect when you flip it: the audio "slot" is set up with the video link up front.
+  REV 2.3  (2026-10-22)  - WORDING ONLY: the old broker name renamed to "MQTT" everywhere (tablet app REV 4.3).
+      * No code change. You run your own Mosquitto broker now, so the old broker's name is gone.
+  REV 2.2  (2026-10-21)  - YOUR OWN MQTT BROKER (tablet app REV 4.2)
+      * No code change here. In Settings (⚙ 1956) put your own broker: Host = your Cloudflare Tunnel
+        hostname (or DuckDNS name), Port = 443 (tunnel) or 8084 (Let's Encrypt), Path = /mqtt, and the
+        robot's user/password. The page always uses secure WebSocket (wss), as a browser must.
+  REV 2.1  (2026-10-20)  - SEND A LICENCE TO THE TABLET (tablet app REV 4.1)
+      * In the expert box "3 · Tablet app update": the tablet's LICENCE status (licensed / NOT licensed +
+        the tablet's Device code), and a field "Licence" + SEND LICENCE TO TABLET.
+        It publishes robot/<id>/admin/licence {"licence":"…"}. A locked tablet cannot drive or send video.
+  REV 2.0  (2026-10-19)  - UPDATE THE TABLET APP FROM ANYWHERE (tablet app REV 4.0)
+      * Expert screen, new box "3 · Tablet app update": the tablet's REV, what it is doing
+        (checking / downloading 40 % / waiting: the robot is being driven / installing / up to date /
+        FAILED…) and a button UPDATE TABLET APP (tap twice to confirm). It sends
+        robot/<id>/admin/update {"cmd":"check"}; the tablet answers on robot/<id>/admin/update/status.
+      * The tablet installs an update only when nobody drives (stop driving first).
   REV 1.9  (2026-10-19)  - DIRECT FIRST, DONE PROPERLY
       * Try 1 (direct only) now has up to 10 s to connect (was 4 s: too short at home, the phone gave up
         on a direct link that was about to work and went to Cloudflare).
@@ -43,7 +64,7 @@
       * ROTATE buttons: unchanged (fixed speed). Tablet and robot: no change needed.
   REV 1.3  (2026-10-14)  - CLOCK-FREE LATENCY for the tablet (tablet app final1 REV 2.27)
       * The page now sends a PING by itself every 2 seconds while it is connected (it was only the
-        PING button before). The ping goes page -> EMQX -> tablet -> USB -> ESP32 and the pong comes
+        PING button before). The ping goes page -> MQTT -> tablet -> USB -> ESP32 and the pong comes
         all the way back. The page times the ROUND TRIP with its own stopwatch: no clock to agree on.
       * Each ping carries the median of the last 10 round trips ("rtt", in ms). The tablet shows half
         of it as LATENCY (phone -> ESP32, one way). Before, the tablet compared the phone's clock with
@@ -75,7 +96,7 @@
       * Nothing else changed.
   REV 0.11 (2026-10-09)  - SIMPLE SCREEN + EXPERT SCREEN (passcode), PHONE ONLY DRIVER
       * SIMPLE SCREEN (what you see when the page opens): the video on top, 4 LEDs
-            N = network (EMQX)   V = video   R = the robot's own LED colour   D = driving
+            N = network (MQTT)   V = video   R = the robot's own LED colour   D = driving
         a big START DRIVING / STOP DRIVING button, the touch joystick + ROTATE + speed
         (only while driving), STOP ALL and Reset e-stop. Nothing else.
       * The page CONNECTS BY ITSELF when it opens, with the login saved on this phone
@@ -87,7 +108,7 @@
         closed). It shows everything: settings and login, device check, robot details, PING,
         video numbers, the LED colour bar. "◀ Simple screen" goes back.
         NOTE: the page is public on GitHub, so the code is a CHILD LOCK against changing
-        settings by accident, not real security. The EMQX password is never in this file.
+        settings by accident, not real security. The MQTT password is never in this file.
       * The pocket joystick remote (ESP32-C3) is archived: "Watch only", the operator
         online/offline display and the "another operator" warning are removed.
         The phone is the only driver.
@@ -124,7 +145,7 @@
   REV 0.7  (2026-10-08)  - LIVE VIDEO FROM THE ROBOT, on the same page as the controls
       * New box at the top: the tablet's FRONT camera (tablet app "final1" REV 2.23 or newer,
         switch "VIDEO TO PHONE" ON there). The video goes straight from the tablet to this page
-        (WebRTC); EMQX only carries 3 short set-up messages, on the connection this page already has.
+        (WebRTC); MQTT only carries 3 short set-up messages, on the connection this page already has.
       * Works in both modes: WATCH ONLY (the pocket remote drives, this page watches) and
         driving from this page with a game controller.
       * Phone held UPRIGHT  = video on top, everything else below (scroll).
@@ -173,11 +194,11 @@
       * SAFETY: driving switches itself OFF (and zeros are sent) when the page is hidden,
         loses focus, the link drops or you disconnect. No controller = zeros.
   REV 0.2  (2026-10-01)  - STEP 2: ROBOT LINK
-      * Settings: EMQX address, port 8084 (secure WebSocket), user, password, robot id.
+      * Settings: MQTT address, port 8084 (secure WebSocket), user, password, robot id.
         They are typed on each device and saved on THAT device only (never in this file).
-      * Connects to EMQX with MQTT v5 (same topics and Last Will as robot_operator.py)
+      * Connects to MQTT with MQTT v5 (same topics and Last Will as robot_operator.py)
       * Shows the robot: online / offline, state, ESP32 LED, firmware, latency, watchdog trips
-      * PING: page -> EMQX -> tablet -> USB -> ESP32 -> back (round-trip time)
+      * PING: page -> MQTT -> tablet -> USB -> ESP32 -> back (round-trip time)
       * Warns if another operator is already online
       * STILL NO MOTION COMMANDS (that is Step 3)
   REV 0.1  (2026-10-01)  - STEP 0 + STEP 1
@@ -312,7 +333,7 @@ body:not(.tpad-on) .vrev { top: auto; bottom: 8px; }     /* STOP ALL sits top ri
 
 /* ---- REV 0.11: SIMPLE SCREEN (default) and EXPERT SCREEN ---- */
 /* simple: only the video, the 4 LEDs, START DRIVING, the joystick (while driving), STOP ALL / Reset */
-body.simple header, body.simple #device, body.simple #link, body.simple #videoBox > h2,
+body.simple header, body.simple #device, body.simple #link, body.simple #upd, body.simple #videoBox > h2,
 body.simple .vbelow, body.simple .vstrip, body.simple .vled { display: none !important; }
 body.simple main { display: block; }
 body.simple #videoBox { padding: 8px; border: 0; background: transparent; }
@@ -336,6 +357,8 @@ header #btnSimple { margin-left: auto; }
 .relaystat.relay { color: #fff; background: #f38020; border-color: #f38020; }   /* Cloudflare orange */
 #btnRelay { font-size: 13px; padding: 6px 8px; white-space: nowrap; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: inherit; }
 #btnRelay[aria-pressed="true"] { background: #f38020; border-color: #f38020; color: #fff; font-weight: 700; }
+#btnAudio { font-size: 13px; padding: 6px 8px; white-space: nowrap; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: inherit; }
+#btnAudio[aria-pressed="true"] { background: #16a34a; border-color: #16a34a; color: #fff; font-weight: 700; }
 #btnGear { font-size: 20px; padding: 6px 12px; background: transparent; }
 .lock { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; }
 .lock[hidden] { display: none; }
@@ -396,7 +419,7 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
 
 <header>
   <h1>Rob2 Operator</h1>
-  <span class="rev">REV 1.9 · expert screen</span>
+  <span class="rev">REV 2.4 · expert screen</span>
   <button id="btnSimple" type="button">◀ Simple screen</button>
   <span class="step">Motion commands are sent only while "Driving" is ON</span>
 </header>
@@ -409,14 +432,14 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
     <div class="vwrap" id="vwrap">
       <video id="vid" autoplay muted playsinline></video>
       <div class="vbadge" id="vBadge">VIDEO OFF</div>
-      <div class="vrev" id="vRev">REV 1.9</div>
+      <div class="vrev" id="vRev">REV 2.4</div>
       <div class="vfrozen" id="vFrozen" hidden>VIDEO FROZEN<small>no new picture for over 1 s — do not drive by this picture</small></div>
       <button class="vmsg" id="vMsg" type="button" disabled>…</button>
       <button class="vstop" id="vStop" type="button" disabled>STOP ALL</button>
     </div>
     <!-- REV 0.11: 4 status LEDs, one letter under each -->
     <div class="leds" id="leds">
-      <div class="led" title="N = network: green = connected to EMQX, amber = connecting, red = cannot connect / login refused"><i id="ledN"></i>N</div>
+      <div class="led" title="N = network: green = connected to MQTT, amber = connecting, red = cannot connect / login refused"><i id="ledN"></i>N</div>
       <div class="led" title="V = video: green = live, amber = connecting, red = FROZEN, grey = video off"><i id="ledV"></i>V</div>
       <div class="led" title="R = robot: the colour of the robot's own LED (the 11 colours of the truth table); grey = no report"><i id="ledR"></i>R</div>
       <div class="led" title="D = driving: green = you are driving, grey = driving off, red = E-STOP"><i id="ledD"></i>D</div>
@@ -456,6 +479,7 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
       <!-- REV 1.7: how the video travels + the Force relay button, on the simple screen too -->
       <div class="gearrow">
         <span class="relaystat mono" id="relayStat">Video: —</span>
+        <button id="btnAudio" type="button" aria-pressed="false" title="two-way audio: talk to the robot and hear it">🎙 Audio: OFF</button>
         <button id="btnRelay" type="button" aria-pressed="false" title="video only through the Cloudflare relay">☁ Force relay</button>
         <button id="btnGear" type="button" title="expert screen (code)" aria-label="Expert screen">⚙</button>
       </div>
@@ -484,9 +508,9 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
 
   <!-- ===================== STEP 2: ROBOT LINK ===================== -->
   <section id="link">
-    <h2>2 · Robot link (EMQX)</h2>
+    <h2>2 · Robot link (MQTT)</h2>
     <div class="row" id="linkPills">
-      <span class="pill warn" id="pillBroker">EMQX: not connected</span>
+      <span class="pill warn" id="pillBroker">MQTT: not connected</span>
       <span class="pill warn" id="pillRobot">Robot: ?</span>
     </div>
     <div id="linkMsg" hidden></div>
@@ -518,8 +542,26 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
     <div class="info mono" id="robotInfo"></div>
     <div class="row">
       <button id="btnPing" type="button" disabled>PING</button>
-      <span class="mono" id="pingLine">measuring page → EMQX → tablet → USB → ESP32 → back (a ping every 2 s)…</span>
+      <span class="mono" id="pingLine">measuring page → MQTT → tablet → USB → ESP32 → back (a ping every 2 s)…</span>
     </div>
+  </section>
+
+  <!-- ===================== REV 2.0: TABLET APP UPDATE (expert screen) ===================== -->
+  <section id="upd">
+    <h2>3 · Tablet app update</h2>
+    <p class="mono small" id="updRev">Tablet app: ?</p>
+    <p class="mono small" id="updState">Update status: (nothing yet)</p>
+    <div class="row">
+      <button type="button" id="btnUpdate">UPDATE TABLET APP</button>
+    </div>
+    <p class="small">The tablet looks for a newer version on GitHub (rob2-tablet-updates) and installs it
+      ONLY when nobody drives: tap STOP DRIVING first. The robot stops during the ~10 s restart.</p>
+    <hr style="border:none;border-top:1px solid var(--line);margin:6px 0">
+    <p class="mono small" id="licState">Tablet licence: ?</p>
+    <label class="span2">Licence (from the licence maker on your Mac)
+      <textarea id="licText" rows="2" placeholder="paste the licence here"></textarea></label>
+    <div class="row"><button type="button" id="btnLic">SEND LICENCE TO TABLET</button></div>
+    <p class="small">A tablet with no valid licence cannot drive the robot or send video. Its Device code is shown above.</p>
   </section>
 
 </main>
@@ -629,7 +671,7 @@ function deviceCheck() {
   const rows = [
     ["Secure page (HTTPS)", window.isSecureContext, "needed for the robot link and the video"],
     ["Touch screen", navigator.maxTouchPoints > 0, "for the touch joystick (a mouse also works)"],
-    ["WebSocket", "WebSocket" in window, "needed for EMQX (Step 2)"],
+    ["WebSocket", "WebSocket" in window, "needed for MQTT (Step 2)"],
     ["Keep screen awake", "wakeLock" in navigator, "nice to have"],
     ["Saving settings on this device", (() => { try { localStorage.setItem("rob2.t", "1"); localStorage.removeItem("rob2.t"); return true; } catch (e) { return false; } })(), "needed to remember the settings and the password"],
   ];
@@ -644,17 +686,19 @@ deviceCheck();
 let speedI = SPEED_START;
 
 /* =======================================================================
-   STEP 2 - ROBOT LINK (EMQX over secure WebSocket)
+   STEP 2 - ROBOT LINK (MQTT over secure WebSocket)
    Same topics, same messages, same Last Will as robot_link.py / robot_operator.py.
    NO motion command is sent in this step.
    ======================================================================= */
-const DEFAULTS = { host: "kd6b8bb2.ala.us-east-1.emqxsl.com", port: 8084, path: "/mqtt", user: "", pass: "", robot: "bot1" };
+const DEFAULTS = { host: "", port: 443, path: "/mqtt", user: "", pass: "", robot: "bot1" };   // REV 2.2: your own broker (Cloudflare Tunnel = 443)
 const SETTINGS_KEY = "rob2.settings.v1";
 
 function topics(robot) {                    // same as topics() in robot_link.py
   const base = `robot/${robot}`;
   return { vel: `${base}/cmd/vel`, estop: `${base}/cmd/estop`, op_status: `${base}/operator/status`,
-           state: `${base}/state`, status: `${base}/status`, ping: `${base}/ping`, pong: `${base}/pong` };
+           state: `${base}/state`, status: `${base}/status`, ping: `${base}/ping`, pong: `${base}/pong`,
+           upd: `${base}/admin/update`, updStatus: `${base}/admin/update/status`,
+           lic: `${base}/admin/licence`, licStatus: `${base}/admin/licence/status` };   // REV 2.0 / 2.1
 }
 
 // A new session id every time the page loads (like uuid4().hex[:8] in Python)
@@ -719,7 +763,7 @@ function connectLink(ev) {
   const local = s.host === "localhost" || s.host.startsWith("127.");
   const url = `${local ? "ws" : "wss"}://${s.host}:${s.port}${s.path}`;
   say("warn", `Connecting to ${url} …`);
-  setPill("pillBroker", "warn", "EMQX: connecting…");
+  setPill("pillBroker", "warn", "MQTT: connecting…");
 
   const options = {
     clientId: `op-web-${s.robot}-${SID}`,
@@ -737,14 +781,15 @@ function connectLink(ev) {
   client.on("connect", () => {
     if (client !== link.client) return;
     link.connected = true; link.everConnected = true;
-    say("ok", "Connected to EMQX. Tap START DRIVING to drive.");
-    setPill("pillBroker", "ok", "EMQX: connected");
+    say("ok", "Connected to MQTT. Tap START DRIVING to drive.");
+    setPill("pillBroker", "ok", "MQTT: connected");
     $("btnPing").disabled = false;
     $("settingsBox").open = false;
-    client.subscribe({ [link.T.state]: { qos: 0 }, [link.T.status]: { qos: 1 }, [link.T.pong]: { qos: 0 } });
+    client.subscribe({ [link.T.state]: { qos: 0 }, [link.T.status]: { qos: 1 }, [link.T.pong]: { qos: 0 },
+                       [link.T.updStatus]: { qos: 1 }, [link.T.licStatus]: { qos: 1 } });        // REV 2.0 / 2.1
     videoOnConnect(client);                       // REV 0.7: the 2 video topics
     // REV 0.11: connecting says NOTHING to the robot. "operator online" is sent by START DRIVING.
-    // After a reconnect while driving, say it again (EMQX may have published our Last Will).
+    // After a reconnect while driving, say it again (MQTT may have published our Last Will).
     if (drive.armed) { client.publish(link.T.op_status, "online", { qos: 1, retain: true }); link.online = true; }
   });
 
@@ -764,6 +809,10 @@ function connectLink(ev) {
       try { link.robotState = JSON.parse(text); link.stateRx = performance.now(); } catch (e) {}
     } else if (topic === link.T.status) {
       link.robotStatus = text;
+    } else if (topic === link.T.updStatus) {                         // REV 2.0: the tablet's update steps
+      try { link.upd = JSON.parse(text); } catch (e) {}
+    } else if (topic === link.T.licStatus) {                         // REV 2.1: the tablet's licence
+      try { link.lic = JSON.parse(text); } catch (e) {}
     }
   });
 
@@ -771,8 +820,8 @@ function connectLink(ev) {
     if (client !== link.client) return;
     const msg = String((err && err.message) || err), code = err && err.code;
     if (code === 134 || code === 135 || code === 4 || code === 5 || /not authorized|bad user ?name/i.test(msg)) {
-      say("bad", "EMQX refused the user name or password. Check them in Settings.");
-      setPill("pillBroker", "bad", "EMQX: login refused");
+      say("bad", "MQTT refused the user name or password. Check them in Settings.");
+      setPill("pillBroker", "bad", "MQTT: login refused");
       link.refused = true;
       client.end(true); link.connected = false; $("btnPing").disabled = true; $("settingsBox").open = true;
       $("btnDisconnect").disabled = true;
@@ -787,9 +836,9 @@ function connectLink(ev) {
     if (link.refused) return;                 // the "login refused" message stays on screen
     if (!link.everConnected) {
       say("bad", "Could not reach the broker. Check the address, the port (8084), the path (/mqtt) and your internet. Trying again…");
-      setPill("pillBroker", "bad", "EMQX: cannot connect");
+      setPill("pillBroker", "bad", "MQTT: cannot connect");
     } else {
-      setPill("pillBroker", "warn", "EMQX: reconnecting…");
+      setPill("pillBroker", "warn", "MQTT: reconnecting…");
     }
   });
 }
@@ -804,7 +853,7 @@ function disconnectLink() {
   try { (client.connected && link.online) ? client.publish(link.T.op_status, "offline", { qos: 1, retain: true }, done) : done(); }
   catch (e) { done(); }
   link.online = false;
-  setPill("pillBroker", "warn", "EMQX: not connected");
+  setPill("pillBroker", "warn", "MQTT: not connected");
   setPill("pillRobot", "warn", "Robot: ?");
   $("btnDisconnect").disabled = true; $("btnPing").disabled = true; $("settingsBox").open = true;
   say("ok", "Disconnected.");
@@ -821,7 +870,7 @@ window.addEventListener("pagehide", () => {
   }
 });
 
-/* ---- ping: page -> EMQX -> tablet -> USB -> ESP32 -> back ---- */
+/* ---- ping: page -> MQTT -> tablet -> USB -> ESP32 -> back ---- */
 function ping() {
   if (!link.client || !link.connected) return;
   const lastPing = link.pingSent.get(link.pingId);
@@ -857,7 +906,7 @@ setInterval(() => {
 function pingLine() {                       // same numbers as ping_line() in robot_operator.py
   const r = link.rtts, now = performance.now();
   let lost = 0; link.pingSent.forEach(t => { if (now - t > 2000) lost++; });
-  if (!r.length) return "measuring page → EMQX → tablet → USB → ESP32 → back (a ping every 2 s)…" + (lost ? `   (lost ${lost})` : "");
+  if (!r.length) return "measuring page → MQTT → tablet → USB → ESP32 → back (a ping every 2 s)…" + (lost ? `   (lost ${lost})` : "");
   const s = r.slice().sort((a, b) => a - b), mean = r.reduce((a, b) => a + b, 0) / r.length;
   const p95 = s[Math.max(0, Math.min(s.length - 1, Math.round(0.95 * s.length) - 1))];
   const jit = r.length > 1 ? Math.sqrt(r.reduce((a, b) => a + (b - mean) ** 2, 0) / r.length) : 0;
@@ -867,6 +916,42 @@ function pingLine() {                       // same numbers as ping_line() in ro
 
 /* ---- show the robot (4 times a second) ---- */
 function line(text) { const d = document.createElement("div"); d.textContent = text; return d; }
+/* REV 2.1: send a licence to the tablet */
+$("btnLic").addEventListener("click", () => {
+  if (!link.client || !link.connected) return;
+  const t = $("licText").value.trim();
+  if (!t) return;
+  link.client.publish(link.T.lic, JSON.stringify({ licence: t }), { qos: 1 });
+});
+/* REV 2.0: UPDATE TABLET APP (tap twice to confirm: the page cannot show a confirm box) */
+let updArmAt = 0;
+$("btnUpdate").addEventListener("click", () => {
+  if (!link.client || !link.connected) return;
+  const now = performance.now();
+  if (now - updArmAt > 5000) { updArmAt = now; return; }        // 1st tap: "tap again to confirm"
+  updArmAt = 0;
+  link.client.publish(link.T.upd, JSON.stringify({ cmd: "check", from: SID }), { qos: 1 });
+  link.upd = { state: "asked the tablet to check for an update…", busy: true };
+});
+function renderUpdate() {
+  const s = link.robotState || {};
+  $("updRev").textContent = "Tablet app: REV " + (s.bridge_rev || "?") + "   ·   robot firmware: " + (s.fw || "?");
+  const u = link.upd;
+  $("updState").textContent = "Update status: " + (u ? `${u.state}${u.latest && u.latest !== "?" ? "   (on GitHub: " + u.latest + ")" : ""}`
+                                                     : "(nothing yet)");
+  const b = $("btnUpdate");
+  const armed = performance.now() - updArmAt < 5000;
+  b.disabled = !(link.client && link.connected);
+  b.textContent = armed ? "TAP AGAIN TO CONFIRM" : "UPDATE TABLET APP";
+  // REV 2.1: licence status
+  const L = link.lic, el = $("licState");
+  if (!L) el.textContent = "Tablet licence: (waiting…)";
+  else if (L.licensed) el.textContent = `Tablet licence: ✓ licensed${L.expiry ? " until " + L.expiry : ""} (Device ${L.device || "?"})`;
+  else el.textContent = `Tablet licence: ✖ NOT licensed — Device code ${L.device || "?"}`;
+  $("btnLic").disabled = !(link.client && link.connected);
+}
+setInterval(renderUpdate, 500);
+
 function renderLink() {
   $("pingLine").textContent = pingLine();
   const box = $("robotInfo");
@@ -878,7 +963,7 @@ function renderLink() {
                               `Robot '${link.robot}': ${link.robotStatus}`);
   box.appendChild(line(`Robot '${link.robot}'  link: ${link.robotStatus}   state report: ${fresh ? "fresh" : "STALE / none"}`));
   if (link.connected && !online)
-    box.appendChild(line("→ robot not reachable: is final1 open on the tablet, with EMQX + USB green?"));
+    box.appendChild(line("→ robot not reachable: is final1 open on the tablet, with MQTT + USB green?"));
   if (s && Object.keys(s).length) {
     const num = (x, d) => (typeof x === "number" ? (x >= 0 ? "+" : "") + x.toFixed(d) : "?");
     box.appendChild(line(`CHAIN   bridge=${s.bridge ?? "?"} rev ${s.bridge_rev ?? "-"}   ESP32 firmware ${s.fw ?? "?"}   ESP32 LED reports: ${s.led ?? "?"}`));
@@ -892,7 +977,7 @@ setInterval(renderLink, 250);
    STEP 3 - DRIVING
    Sends the --sticks command 8 times a second, exactly like send_vel() in
    robot_operator.py:  {"sid","seq","t","v","vy","w"}  QoS 0, never 2 messages
-   closer than 100 ms (EMQX Serverless allows 10 per second).
+   closer than 100 ms (MQTT broker allows 10 per second).
    ======================================================================= */
 const SEND_HZ = 8, PERIOD_MS = 1000 / SEND_HZ, MIN_GAP_MS = 100;
 
@@ -907,7 +992,7 @@ function classify(vx, vy, w) {
   return w > 0 ? "ROTATE_LEFT" : "ROTATE_RIGHT";
 }
 
-/* EMQX Serverless allows 10 messages per second from one client. Count what we sent in
+/* MQTT broker allows 10 messages per second from one client. Count what we sent in
    the last second: ordinary messages wait when we are at the limit; STOP and e-stop never wait. */
 const RATE_LIMIT = 10;
 const sentTimes = [];
@@ -947,7 +1032,7 @@ function driveTick() {
   const stopNow = moving && !c.v && !c.vy && !c.w;            // a STOP goes out right away...
   if (stopNow) drive.nextT = Math.min(drive.nextT, Math.max(now, drive.lastSend + MIN_GAP_MS));
   if (now >= drive.nextT) {                                   // ...everything else on the 8 Hz beat
-    // At the EMQX limit: wait for the next tick. The FIRST stop after moving never waits.
+    // At the MQTT limit: wait for the next tick. The FIRST stop after moving never waits.
     if (!stopNow && sentLastSecond() >= RATE_LIMIT - 1) return;
     sendVel(c);
     drive.nextT = Math.max(drive.nextT + PERIOD_MS, now + MIN_GAP_MS);
@@ -1020,13 +1105,13 @@ window.addEventListener("pagehide", () => { if (drive.armed && link.client && li
    REV 0.7 - LIVE VIDEO FROM THE ROBOT
    The tablet app "final1" (REV 2.23+) sends its FRONT camera. This page is the VIEWER.
    Exactly the same set-up messages as video-test.html (the proven test page):
-       robot/<id>/video/camera   tablet -> everyone, kept by EMQX: "ready"/"offline" + who is watching
+       robot/<id>/video/camera   tablet -> everyone, kept by MQTT: "ready"/"offline" + who is watching
        robot/<id>/video/hello    this page -> tablet  ("I want to watch")
        robot/<id>/video/offer    tablet -> this page
        robot/<id>/video/answer   this page -> tablet
-   They use the SAME EMQX connection as the rest of the page (section 2), and they count in
+   They use the SAME MQTT connection as the rest of the page (section 2), and they count in
    the "10 messages a second" budget, like the driving commands.
-   The video itself goes straight from the tablet to this page (WebRTC), not through EMQX.
+   The video itself goes straight from the tablet to this page (WebRTC), not through MQTT.
    The video is ONE WAY: tablet -> this page. This page never sends a camera or a sound.
    ======================================================================= */
 const VIDEO_KEY      = "rob2.opvideo.v1";       // "show the robot's camera" ON/OFF, remembered on this device
@@ -1057,15 +1142,17 @@ const vid = {
   tryText: "",                  // REV 1.9: "try 1 (direct): connected in 3.8 s" …
   stageNoPass: false,           // REV 1.8: try 2 but the tablet sent no relay pass
   noPass: false,                // REV 1.2: relay forced, but the tablet sent no relay pass
+  audioOn: false,               // REV 2.4: two-way audio intercom (OFF by default, never remembered)
+  micStream: null,              // REV 2.4: our microphone, while audio is ON
 };
 $("vOn").checked = vid.on;
 
 function videoTopics(robot) {
   const base = `robot/${robot}/video`;
-  return { camera: `${base}/camera`, hello: `${base}/hello`, offer: `${base}/offer`, answer: `${base}/answer` };
+  return { camera: `${base}/camera`, hello: `${base}/hello`, offer: `${base}/offer`, answer: `${base}/answer`, audio: `${base}/audio` };
 }
 
-/* ---- called by the EMQX part of the page (section 2) ---- */
+/* ---- called by the MQTT part of the page (section 2) ---- */
 function videoOnConnect(client) {
   vid.T = videoTopics(link.robot);
   client.subscribe({ [vid.T.camera]: { qos: 1 }, [vid.T.offer]: { qos: 1 } });
@@ -1075,6 +1162,7 @@ function videoReset(why) {                       // new connection or Disconnect
   vid.relayStage = 0; vid.stageNoPass = false;    // REV 1.8: start again with "direct first"
   vid.camState = "?"; vid.camSid = null; vid.helloSent = false; vid.takenOver = false;
   vid.awaitingOffer = false; vid.helloAt = -1e9; vid.helloGap = V_HELLO_GAP;
+  audioStopAll();                                 // REV 2.4: audio starts OFF again on a fresh connection
 }
 function videoOnMessage(topic, text) {
   if (!vid.T) return;
@@ -1161,12 +1249,18 @@ async function videoOffer(m) {
     // "show every picture as soon as it arrives": no safety buffer
     try { e.receiver.jitterBufferTarget = 0; } catch (err) {}
     try { e.receiver.playoutDelayHint = 0; } catch (err) {}
-    vEl.srcObject = e.streams[0] || new MediaStream([e.track]);
+    // REV 2.4: the tablet's audio rides in the same stream. Keep it muted unless the intercom is ON.
+    if (e.streams[0]) vEl.srcObject = e.streams[0];
+    else if (!vEl.srcObject) vEl.srcObject = new MediaStream([e.track]);
+    else { try { vEl.srcObject.addTrack(e.track); } catch (err) {} }
+    vEl.muted = !vid.audioOn;
     vEl.play().catch(() => {});
   };
   p.onconnectionstatechange = () => {
     if (vid.pc === p && p.connectionState === "connected") {
       vid.helloGap = V_HELLO_GAP;
+      // REV 2.4: if audio was ON (e.g. the link just reconnected), tell the tablet again and un-mute.
+      if (vid.audioOn) { if (vid.T) videoSend(vid.T.audio, { on: true, from: SID }); vEl.muted = false; }
       const sec = ((performance.now() - tryStart) / 1000).toFixed(1);            // REV 1.9: how long it took
       vid.tryText = vid.forceRelay ? `forced relay: connected in ${sec} s`
                   : vid.relayStage === 0 ? `try 1 (direct): connected in ${sec} s`
@@ -1178,6 +1272,7 @@ async function videoOffer(m) {
     const direct = !vid.forceRelay && vid.relayStage === 0;
     const sdp = direct ? m.sdp.split(/\r?\n/).filter(l => !/^a=candidate:.* typ relay/.test(l)).join("\r\n") : m.sdp;
     await p.setRemoteDescription({ type: "offer", sdp });
+    await videoApplyAudioToPeer(p);            // REV 2.4: keep the audio slot two-way; attach our mic if ON
     await p.setLocalDescription(await p.createAnswer());
     await videoGathered(p, pass.length ? V_GATHER_RELAY_MS : V_GATHER_MS);
     if (vid.pc !== p) return;
@@ -1202,7 +1297,7 @@ function videoPass(ice) {
   return out.some(e => e.urls.some(u => u.startsWith("turn"))) ? out : [];    // no relay address = no pass
 }
 
-/* ---- close the direct link (EMQX stays connected) ---- */
+/* ---- close the direct link (MQTT stays connected) ---- */
 function videoDrop(why) {
   const p = vid.pc; if (!p) return;
   vid.pc = null; vid.dc = null; vid.badSince = 0; vid.firstFrame = false;
@@ -1211,6 +1306,60 @@ function videoDrop(why) {
   vEl.srcObject = null;
   vid.lastWhy = why;
   vid.helloAt = performance.now() - vid.helloGap + 1000;      // ask again in about 1 second (if still wanted)
+  // REV 2.4: the mic stream survives a reconnect (we re-attach it on the next link); nothing to do here.
+}
+
+/* ========================================================================================
+   REV 2.4 — TWO-WAY AUDIO (intercom)
+   The tablet's video OFFER always carries an audio "slot" (sendrecv). We keep that slot set
+   to sendrecv so we can start/stop talking WITHOUT rebuilding the link: we only swap the mic
+   track in (ON) or out (OFF) with replaceTrack, which needs no new offer/answer.
+   ====================================================================================== */
+async function videoApplyAudioToPeer(p) {
+  if (!p) return;
+  // the audio transceiver the tablet offered (its receiver already has an audio track)
+  const at = p.getTransceivers().find(t => t.receiver && t.receiver.track && t.receiver.track.kind === "audio")
+          || p.getTransceivers().find(t => t.sender && t.sender.track && t.sender.track.kind === "audio");
+  if (!at) return;
+  try { at.direction = "sendrecv"; } catch (e) {}          // stay two-way, even while muted
+  try {
+    const micTrack = (vid.audioOn && vid.micStream) ? vid.micStream.getAudioTracks()[0] : null;
+    await at.sender.replaceTrack(micTrack);                // null = send nothing; no reconnect either way
+  } catch (e) {}
+}
+
+async function toggleAudio() {
+  const want = !vid.audioOn;
+  if (want) {
+    try {
+      vid.micStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false });
+    } catch (e) {
+      vid.lastWhy = "Microphone not allowed: " + (e && e.message ? e.message : e);
+      const b = $("btnAudio"); if (b) b.textContent = "🎙 mic blocked";
+      return;                                              // stay OFF
+    }
+  } else if (vid.micStream) {
+    vid.micStream.getTracks().forEach(t => t.stop()); vid.micStream = null;
+  }
+  vid.audioOn = want;
+  await videoApplyAudioToPeer(vid.pc);                     // attach / detach the mic on the current link
+  vEl.muted = !want;                                       // hear the robot when ON
+  if (want) vEl.play().catch(() => {});
+  updateAudioBtn();
+  if (vid.T) videoSend(vid.T.audio, { on: want, from: SID });   // tell the tablet to open / close its mic
+}
+
+function updateAudioBtn() {
+  const b = $("btnAudio"); if (!b) return;
+  b.setAttribute("aria-pressed", String(vid.audioOn));
+  b.textContent = vid.audioOn ? "🎙 Audio: ON" : "🎙 Audio: OFF";
+  b.classList.toggle("on", vid.audioOn);
+}
+
+function audioStopAll() {                                  // used on Disconnect / fresh connection
+  if (vid.micStream) { vid.micStream.getTracks().forEach(t => t.stop()); vid.micStream = null; }
+  vid.audioOn = false; vEl.muted = true; updateAudioBtn();
 }
 
 /* ---- is a new picture on the screen? (for "VIDEO FROZEN") ---- */
@@ -1253,6 +1402,8 @@ $("vRelay").addEventListener("change", e => {
   videoDrop(vid.forceRelay ? "Force relay switched ON" : "Force relay switched OFF");
   vid.helloAt = -1e9; vid.helloGap = V_HELLO_GAP; vid.awaitingOffer = false;
 });
+$("btnAudio").addEventListener("click", toggleAudio);   // REV 2.4: two-way audio on/off
+updateAudioBtn();
 $("vMsg").addEventListener("click", () => {      // "take the picture back" from another device
   if (!vid.takenOver) return;
   vid.takenOver = false; vid.helloAt = -1e9; vid.helloGap = V_HELLO_GAP; vid.awaitingOffer = false;
@@ -1395,7 +1546,7 @@ function renderVideo() {
   const msg = $("vMsg");
   let text = "", tap = false;
   if (!vid.on) text = "Video is OFF. Tick “Show the robot's camera” (hold the phone upright).";
-  else if (!linked) text = haveLogin() ? "Connecting to EMQX…" : "First time: tap ⚙ (code 1956) and type the EMQX login once.";
+  else if (!linked) text = haveLogin() ? "Connecting to MQTT…" : "First time: tap ⚙ (code 1956) and type the MQTT login once.";
   else if (vid.noPass && !live) text = "Force relay is ON, but the tablet sent no relay pass: needs tablet app REV 3.2 with the Cloudflare key typed in (or switch Force relay OFF).";
   else if (vid.takenOver) { text = "Another device is watching the robot's camera. Tap here to take the picture back."; tap = true; }
   else if (vid.camState === "offline") text = "The tablet's camera is off: switch VIDEO TO PHONE ON in the tablet app.";
@@ -1409,7 +1560,7 @@ function renderVideo() {
   // the status strip (bottom): robot + who drives
   const s = link.robotState || {}, fresh = link.stateRx && t - link.stateRx < 1500;
   let strip;
-  if (!linked) strip = "not connected to EMQX";
+  if (!linked) strip = "not connected to MQTT";
   else {
     strip = fresh ? `${s.state ?? "?"} · LED ${s.led ?? "?"} · lat ${s.latency_ms ?? "-"} ms · wd ${s.watchdog_trips ?? "?"}`
                   : "robot: no fresh report";
@@ -1610,8 +1761,8 @@ function renderTouch() {
   tm.className = "tmotion mono" + (c && !c.name.startsWith("STOP") ? " go" : "");
   const note = $("tNote");
   let text = "";
-  if (!linked) text = haveLogin() ? (link.refused ? "EMQX refused the login: tap ⚙ to check it." : "Connecting to EMQX…")
-                                   : "First time: tap ⚙ (code 1956), type the EMQX login, tick “remember”, press Connect.";
+  if (!linked) text = haveLogin() ? (link.refused ? "MQTT refused the login: tap ⚙ to check it." : "Connecting to MQTT…")
+                                   : "First time: tap ⚙ (code 1956), type the MQTT login, tick “remember”, press Connect.";
   else if (drive.estopNote && drive.estopNote.startsWith("E-STOP")) text = "E-STOP is ON: press Reset e-stop, then let go of everything, to drive again.";
   else if (!drive.armed && drive.offWhy && performance.now() - drive.offAt < 8000) text = drive.offWhy;
   else if (!drive.armed && !document.body.classList.contains("simple")) text = "Driving is OFF. Tap START DRIVING to use the joystick (the robot only moves while your finger is on it).";
