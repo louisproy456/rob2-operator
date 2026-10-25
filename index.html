@@ -2,6 +2,10 @@
 <!--
   Rob2 Operator - universal browser controller for Rob2
   =====================================================
+  REV 2.5  (2026-10-25)  - LOWER VIDEO LATENCY: the robot's audio now plays in its own hidden <audio>
+      element instead of the <video> element. The browser no longer holds the picture to sync it with
+      sound, so the video goes back to its lowest latency (~0.1 s) whether audio is on or off. Two-way
+      audio works exactly the same. No tablet change (stays REV 4.8).
   REV 2.4  (2026-10-24)  - TWO-WAY AUDIO (intercom) with tablet app REV 4.4.
       * New "🎙 Audio" button under the video. OFF by default. Tap = talk to the robot AND hear it.
       * ON asks the browser for the microphone, sends your voice to the tablet and un-mutes the
@@ -419,7 +423,7 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
 
 <header>
   <h1>Rob2 Operator</h1>
-  <span class="rev">REV 2.4 · expert screen</span>
+  <span class="rev">REV 2.5 · expert screen</span>
   <button id="btnSimple" type="button">◀ Simple screen</button>
   <span class="step">Motion commands are sent only while "Driving" is ON</span>
 </header>
@@ -431,8 +435,10 @@ body.tpad-on .vstop, body.tpad-on .vstrip button { display: none; }
     <h2>Robot camera</h2>
     <div class="vwrap" id="vwrap">
       <video id="vid" autoplay muted playsinline></video>
+      <!-- REV 2.5: the robot's AUDIO plays here, in its OWN element, so it never adds A/V-sync delay to the video. -->
+      <audio id="aud" autoplay playsinline style="display:none"></audio>
       <div class="vbadge" id="vBadge">VIDEO OFF</div>
-      <div class="vrev" id="vRev">REV 2.4</div>
+      <div class="vrev" id="vRev">REV 2.5</div>
       <div class="vfrozen" id="vFrozen" hidden>VIDEO FROZEN<small>no new picture for over 1 s — do not drive by this picture</small></div>
       <button class="vmsg" id="vMsg" type="button" disabled>…</button>
       <button class="vstop" id="vStop" type="button" disabled>STOP ALL</button>
@@ -1126,6 +1132,7 @@ const V_DELAY_WARN   = 0.30;     // seconds: amber above this
 const V_DELAY_BAD    = 0.50;     //          red above this
 
 const vEl = $("vid");
+const aEl = $("aud");          // REV 2.5: the robot's audio plays here, separate from the video
 const vid = {
   on: (() => { try { return JSON.parse(localStorage.getItem(VIDEO_KEY) || "{}").on !== false; } catch (e) { return true; } })(),
   T: null,                      // the video topic names
@@ -1249,18 +1256,28 @@ async function videoOffer(m) {
     // "show every picture as soon as it arrives": no safety buffer
     try { e.receiver.jitterBufferTarget = 0; } catch (err) {}
     try { e.receiver.playoutDelayHint = 0; } catch (err) {}
-    // REV 2.4: the tablet's audio rides in the same stream. Keep it muted unless the intercom is ON.
-    if (e.streams[0]) vEl.srcObject = e.streams[0];
-    else if (!vEl.srcObject) vEl.srcObject = new MediaStream([e.track]);
-    else { try { vEl.srcObject.addTrack(e.track); } catch (err) {} }
-    vEl.muted = !vid.audioOn;
-    vEl.play().catch(() => {});
+    if (e.track.kind === "audio") {
+      // REV 2.5: the robot's audio plays in its OWN <audio> element — NOT the video element — so the
+      // browser never holds the picture to sync it with sound. Video latency stays at its lowest.
+      if (!aEl.srcObject) aEl.srcObject = new MediaStream();
+      try { aEl.srcObject.getAudioTracks().forEach(t => aEl.srcObject.removeTrack(t)); } catch (err) {}
+      try { aEl.srcObject.addTrack(e.track); } catch (err) {}
+      aEl.muted = !vid.audioOn;
+      if (vid.audioOn) aEl.play().catch(() => {});
+    } else {
+      // VIDEO only in the video element (always muted here — audio lives in aEl)
+      if (!vEl.srcObject || vEl.srcObject === aEl.srcObject) vEl.srcObject = new MediaStream();
+      try { vEl.srcObject.getVideoTracks().forEach(t => vEl.srcObject.removeTrack(t)); } catch (err) {}
+      try { vEl.srcObject.addTrack(e.track); } catch (err) {}
+      vEl.muted = true;
+      vEl.play().catch(() => {});
+    }
   };
   p.onconnectionstatechange = () => {
     if (vid.pc === p && p.connectionState === "connected") {
       vid.helloGap = V_HELLO_GAP;
       // REV 2.4: if audio was ON (e.g. the link just reconnected), tell the tablet again and un-mute.
-      if (vid.audioOn) { if (vid.T) videoSend(vid.T.audio, { on: true, from: SID }); vEl.muted = false; }
+      if (vid.audioOn) { if (vid.T) videoSend(vid.T.audio, { on: true, from: SID }); aEl.muted = false; aEl.play().catch(() => {}); }   // REV 2.5
       const sec = ((performance.now() - tryStart) / 1000).toFixed(1);            // REV 1.9: how long it took
       vid.tryText = vid.forceRelay ? `forced relay: connected in ${sec} s`
                   : vid.relayStage === 0 ? `try 1 (direct): connected in ${sec} s`
@@ -1304,6 +1321,7 @@ function videoDrop(why) {
   vid.mine = {}; vid.far = {}; vid.prev = {}; vid.prevAt = 0; vid.lossRing = [];
   try { p.close(); } catch (e) {}
   vEl.srcObject = null;
+  if (aEl) aEl.srcObject = null;                              // REV 2.5: drop the audio element too
   vid.lastWhy = why;
   vid.helloAt = performance.now() - vid.helloGap + 1000;      // ask again in about 1 second (if still wanted)
   // REV 2.4: the mic stream survives a reconnect (we re-attach it on the next link); nothing to do here.
@@ -1344,8 +1362,8 @@ async function toggleAudio() {
   }
   vid.audioOn = want;
   await videoApplyAudioToPeer(vid.pc);                     // attach / detach the mic on the current link
-  vEl.muted = !want;                                       // hear the robot when ON
-  if (want) vEl.play().catch(() => {});
+  aEl.muted = !want;                                       // REV 2.5: hear the robot through the AUDIO element
+  if (want) aEl.play().catch(() => {});
   updateAudioBtn();
   if (vid.T) videoSend(vid.T.audio, { on: want, from: SID });   // tell the tablet to open / close its mic
 }
@@ -1359,7 +1377,7 @@ function updateAudioBtn() {
 
 function audioStopAll() {                                  // used on Disconnect / fresh connection
   if (vid.micStream) { vid.micStream.getTracks().forEach(t => t.stop()); vid.micStream = null; }
-  vid.audioOn = false; vEl.muted = true; updateAudioBtn();
+  vid.audioOn = false; if (aEl) aEl.muted = true; vEl.muted = true; updateAudioBtn();   // REV 2.5
 }
 
 /* ---- is a new picture on the screen? (for "VIDEO FROZEN") ---- */
